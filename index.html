@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Home Dashboard</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #1a202c; /* Dark background */
+            color: #e2e8f0; /* Light text */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 1rem;
+        }
+        .card {
+            background-color: #2d3748; /* Darker card background */
+            border-radius: 0.75rem; /* Rounded corners */
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        .status-indicator {
+            padding: 0.5rem 1rem;
+            border-radius: 9999px; /* Pill shape */
+            font-weight: bold;
+            text-transform: uppercase;
+            font-size: 0.875rem; /* text-sm */
+        }
+        .status-armed { background-color: #dc2626; } /* Red */
+        .status-disarmed { background-color: #10b981; } /* Green */
+        .status-locked { background-color: #f59e0b; } /* Orange */
+        .status-unlocked { background-color: #3b82f6; } /* Blue */
+        .status-detected { background-color: #ef4444; } /* Red */
+        .status-cleared { background-color: #10b981; } /* Green */
+        .status-active { background-color: #dc2626; } /* Red */
+        .status-inactive { background-color: #10b981; } /* Green */
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            font-weight: bold;
+            transition: background-color 0.2s;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        .btn-primary {
+            background-color: #4299e1; /* Blue */
+            color: white;
+        }
+        .btn-primary:hover {
+            background-color: #3182ce;
+        }
+        .btn-danger {
+            background-color: #ef4444; /* Red */
+            color: white;
+        }
+        .btn-danger:hover {
+            background-color: #dc2626;
+        }
+        .btn-success {
+            background-color: #10b981; /* Green */
+            color: white;
+        }
+        .btn-success:hover {
+            background-color: #059669;
+        }
+        .btn-warning {
+            background-color: #f59e0b; /* Orange */
+            color: white;
+        }
+        .btn-warning:hover {
+            background-color: #d97706;
+        }
+        .log-entry {
+            padding: 0.5rem;
+            border-bottom: 1px solid #4a5568;
+            font-size: 0.875rem;
+        }
+        .log-info { color: #a0aec0; }
+        .log-warning { color: #f59e0b; }
+        .log-danger { color: #ef4444; }
+        .log-success { color: #10b981; }
+        .log-alert { color: #dc2626; font-weight: bold; }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen flex items-center justify-center p-4">
+    <div class="container mx-auto max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-6">
+
+        <!-- System Status Card -->
+        <div class="card p-6">
+            <h2 class="text-2xl font-bold mb-4 text-center">System Status</h2>
+            <div class="flex flex-col space-y-4">
+                <div class="flex justify-between items-center">
+                    <span class="text-lg font-semibold">Armed Status:</span>
+                    <span id="armedStatus" class="status-indicator status-disarmed">DISARMED</span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-lg font-semibold">Lock Status:</span>
+                    <span id="lockStatus" class="status-indicator status-locked">LOCKED</span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-lg font-semibold">Motion Sensor:</span>
+                    <span id="motionStatus" class="status-indicator status-cleared">CLEARED</span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-lg font-semibold">Ultrasonic Distance:</span>
+                    <span id="distanceValue" class="status-indicator bg-gray-600">N/A cm</span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-lg font-semibold">Alarm Status:</span>
+                    <span id="alarmStatus" class="status-indicator status-inactive">INACTIVE</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Controls Card -->
+        <div class="card p-6">
+            <h2 class="text-2xl font-bold mb-4 text-center">Controls</h2>
+            <div class="grid grid-cols-2 gap-4">
+                <button id="armBtn" class="btn btn-success">ARM SYSTEM</button>
+                <button id="disarmBtn" class="btn btn-danger">DISARM SYSTEM</button>
+                <button id="lockBtn" class="btn btn-warning">LOCK DOOR</button>
+                <button id="unlockBtn" class="btn btn-primary">UNLOCK DOOR</button>
+            </div>
+        </div>
+
+        <!-- Activity Log Card -->
+        <div class="card p-6 md:col-span-2">
+            <h2 class="text-2xl font-bold mb-4 text-center">Activity Log</h2>
+            <div id="activityLog" class="bg-gray-800 h-64 overflow-y-auto rounded-md p-2">
+                <!-- Log entries will be inserted here -->
+                <div class="text-center text-gray-500 py-4">Loading logs...</div>
+            </div>
+            <button id="clearLogsBtn" class="btn btn-primary w-full mt-4">Clear Logs</button>
+        </div>
+
+    </div>
+
+    <script>
+        const BACKEND_URL = 'http://localhost:3000'; // Your Node.js backend URL
+
+        // Get UI elements
+        const armedStatusEl = document.getElementById('armedStatus');
+        const lockStatusEl = document.getElementById('lockStatus');
+        const motionStatusEl = document.getElementById('motionStatus');
+        const distanceValueEl = document.getElementById('distanceValue');
+        const alarmStatusEl = document.getElementById('alarmStatus');
+        const activityLogEl = document.getElementById('activityLog');
+
+        const armBtn = document.getElementById('armBtn');
+        const disarmBtn = document.getElementById('disarmBtn');
+        const lockBtn = document.getElementById('lockBtn');
+        const unlockBtn = document.getElementById('unlockBtn');
+        const clearLogsBtn = document.getElementById('clearLogsBtn');
+
+        // --- Functions to update UI ---
+        function updateArmedStatus(status) {
+            armedStatusEl.textContent = status.toUpperCase();
+            armedStatusEl.className = `status-indicator ${status === 'ARMED' ? 'status-armed' : 'status-disarmed'}`;
+        }
+
+        function updateLockStatus(status) {
+            lockStatusEl.textContent = status.toUpperCase();
+            lockStatusEl.className = `status-indicator ${status === 'LOCKED' ? 'status-locked' : 'status-unlocked'}`;
+        }
+
+        function updateMotionStatus(status) {
+            motionStatusEl.textContent = status.toUpperCase();
+            motionStatusEl.className = `status-indicator ${status === 'DETECTED' ? 'status-detected' : 'status-cleared'}`;
+        }
+
+        function updateDistanceValue(value) {
+            distanceValueEl.textContent = `${value} cm`;
+            // Optional: Change color based on threshold
+            if (value < 20 && value > 0) {
+                distanceValueEl.classList.remove('bg-gray-600');
+                distanceValueEl.classList.add('status-detected');
+            } else {
+                distanceValueEl.classList.remove('status-detected');
+                distanceValueEl.classList.add('bg-gray-600');
+            }
+        }
+
+        function updateAlarmStatus(status) {
+            alarmStatusEl.textContent = status.toUpperCase();
+            alarmStatusEl.className = `status-indicator ${status === 'ACTIVE' ? 'status-active' : 'status-inactive'}`;
+        }
+
+        function addLogEntry(log) {
+            const logDiv = document.createElement('div');
+            const timestamp = new Date(log.timestamp).toLocaleTimeString();
+            logDiv.className = `log-entry log-${log.type}`;
+            logDiv.innerHTML = `<strong>[${timestamp}]</strong> ${log.message}`;
+            activityLogEl.prepend(logDiv); // Add new logs at the top
+            // Keep log display from getting too long
+            if (activityLogEl.children.length > 50) {
+                activityLogEl.removeChild(activityLogEl.lastChild);
+            }
+        }
+
+        // --- Fetch Data from Backend ---
+        async function fetchSystemStatus() {
+            try {
+                // Fetch settings (for armed status)
+                const settingsRes = await fetch(`${BACKEND_URL}/api/settings`);
+                const settings = await settingsRes.json();
+                const systemArmedSetting = settings.find(s => s.settingName === 'systemArmed');
+                if (systemArmedSetting) {
+                    updateArmedStatus(systemArmedSetting.value ? 'ARMED' : 'DISARMED');
+                }
+
+                // Fetch devices
+                const devicesRes = await fetch(`${BACKEND_URL}/api/devices`);
+                const devices = await devicesRes.json();
+
+                devices.forEach(device => {
+                    if (device.deviceId === 'smartLock001') {
+                        updateLockStatus(device.status);
+                    } else if (device.deviceId === 'motionSensor001') {
+                        updateMotionStatus(device.status);
+                    } else if (device.deviceId === 'ultrasonicSensor001') {
+                        updateDistanceValue(device.value);
+                    } else if (device.deviceId === 'siren001') {
+                        updateAlarmStatus(device.status);
+                    }
+                });
+
+                // Fetch logs
+                const logsRes = await fetch(`${BACKEND_URL}/api/logs`);
+                const logs = await logsRes.json();
+                activityLogEl.innerHTML = ''; // Clear existing
+                logs.forEach(addLogEntry);
+
+            } catch (error) {
+                console.error('Error fetching system status:', error);
+                activityLogEl.innerHTML = `<div class="text-center text-red-500 py-4">Error loading data. Is backend running?</div>`;
+            }
+        }
+
+        // --- Send Commands to Backend ---
+        async function sendCommand(command) {
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/commands`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ command: command })
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    console.log(`Command '${command}' sent:`, data.message);
+                    // Optionally, refresh data after sending command
+                    fetchSystemStatus();
+                } else {
+                    console.error(`Failed to send command '${command}':`, data.message);
+                    alert(`Error: ${data.message}`); // Use a simple alert for feedback
+                }
+            } catch (error) {
+                console.error('Network error sending command:', error);
+                alert('Network error: Could not connect to backend.');
+            }
+        }
+
+        // --- Event Listeners ---
+        armBtn.addEventListener('click', () => sendCommand('ARM'));
+        disarmBtn.addEventListener('click', () => sendCommand('DISARM'));
+        lockBtn.addEventListener('click', () => sendCommand('LOCK'));
+        unlockBtn.addEventListener('click', () => sendCommand('UNLOCK'));
+        clearLogsBtn.addEventListener('click', async () => {
+            if (confirm('Are you sure you want to clear all logs?')) {
+                try {
+                    const response = await fetch(`${BACKEND_URL}/api/logs`, { method: 'DELETE' });
+                    const data = await response.json();
+                    if (response.ok) {
+                        console.log(data.message);
+                        activityLogEl.innerHTML = '<div class="text-center text-gray-500 py-4">Logs cleared.</div>';
+                    } else {
+                        console.error('Failed to clear logs:', data.message);
+                        alert(`Error clearing logs: ${data.message}`);
+                    }
+                } catch (error) {
+                    console.error('Network error clearing logs:', error);
+                    alert('Network error: Could not connect to backend to clear logs.');
+                }
+            }
+        });
+
+        // --- Initial Load and Polling ---
+        // Fetch initial status when page loads
+        fetchSystemStatus();
+
+        // Periodically fetch status to keep UI updated (e.g., every 2 seconds)
+        // In a real-time app, you might use WebSockets from backend to frontend
+        // for instant updates, but polling is simpler for initial setup.
+        setInterval(fetchSystemStatus, 2000); // Poll every 2 seconds
+
+    </script>
+</body>
+</html>

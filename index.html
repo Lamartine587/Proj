@@ -192,8 +192,7 @@
             const timestamp = new Date(log.timestamp).toLocaleTimeString();
             logDiv.className = `log-entry log-${log.type}`;
             logDiv.innerHTML = `<strong>[${timestamp}]</strong> ${log.message}`;
-            activityLogEl.prepend(logDiv); // Add new logs at the top
-            // Keep log display from getting too long
+            activityLogEl.prepend(logDiv); 
             if (activityLogEl.children.length > 50) {
                 activityLogEl.removeChild(activityLogEl.lastChild);
             }

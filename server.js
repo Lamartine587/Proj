@@ -1,198 +1,125 @@
-require('dotenv').config();
 const express = require('express');
+const dotenv = require('dotenv');
 const cors = require('cors');
-const mongoose = require('mongoose');
-const mqtt = require('mqtt');
-const path = require('path');
-
-// Database and Route Imports
+const mongoose = require('mongoose'); // Ensure mongoose is imported
+const mqtt = require('mqtt'); // MQTT client library
 const connectDB = require('./config/db');
 const apiRoutes = require('./routes/api');
 const { initializeDefaultSettings } = require('./controllers/settingsController');
-const Device = require('./models/Device');
-const Log = require('./models/Log');
-const Setting = require('./models/Settings');
+const Device = require('./models/Device'); // Import Device model to update states
+const Log = require('./models/Log'); // Import Log model to record events
+const Setting = require('./models/Settings'); // Import Setting model to update armed status
 
-// Initialize Express App
-const app = express();
+dotenv.config();
 
-// Connect to MongoDB
 connectDB();
 
-// Middleware
+const app = express();
 app.use(cors());
 app.use(express.json());
 
-// MQTT Configuration
+// --- MQTT Client Setup ---
 const mqttOptions = {
-  clientId: `mqttjs_${Math.random().toString(16).substr(2, 8)}`,
-  username: process.env.MQTT_USERNAME,
-  password: process.env.MQTT_PASSWORD,
-  reconnectPeriod: 1000 // Reconnect every 1 second if connection is lost
+    clientId: `mqttjs_${Math.random().toString(16).substr(2, 8)}`, // Unique client ID
+    username: process.env.MQTT_USERNAME,
+    password: process.env.MQTT_PASSWORD,
 };
 
 const mqttClient = mqtt.connect(process.env.MQTT_BROKER_URL, mqttOptions);
 
-// MQTT Event Handlers
 mqttClient.on('connect', () => {
-  console.log('✅ Connected to MQTT Broker');
-  
-  const topics = [
-    'home/lock/status',
-    'home/sensor/motion',
-    'home/sensor/distance',
-    'home/security/alarm',
-    'home/security/armed'
-  ];
-
-  topics.forEach(topic => {
-    mqttClient.subscribe(topic, (err) => {
-      if (err) {
-        console.error(`❌ Failed to subscribe to ${topic}:`, err);
-      } else {
-        console.log(`🔔 Subscribed to ${topic}`);
-      }
+    console.log('Connected to MQTT Broker 🎉');
+    // Subscribe to topics where ESP32 publishes data
+    mqttClient.subscribe('home/lock/status', (err) => {
+        if (!err) console.log('Subscribed to home/lock/status');
     });
-  });
+    mqttClient.subscribe('home/sensor/motion', (err) => {
+        if (!err) console.log('Subscribed to home/sensor/motion');
+    });
+    mqttClient.subscribe('home/sensor/distance', (err) => {
+        if (!err) console.log('Subscribed to home/sensor/distance');
+    });
+    mqttClient.subscribe('home/security/alarm', (err) => {
+        if (!err) console.log('Subscribed to home/security/alarm');
+    });
+    mqttClient.subscribe('home/security/armed', (err) => {
+        if (!err) console.log('Subscribed to home/security/armed');
+    });
 });
 
 mqttClient.on('message', async (topic, message) => {
-  const payload = message.toString();
-  console.log(`📨 MQTT Message - ${topic}: ${payload}`);
+    const payload = message.toString();
+    console.log(`MQTT Message - Topic: ${topic}, Payload: ${payload}`);
 
-  try {
-    let deviceId, status, value, logMessage, logType = 'info';
+    try {
+        let deviceId;
+        let status;
+        let value;
+        let logMessage;
+        let logType = 'info';
 
-    switch (topic) {
-      case 'home/lock/status':
-        deviceId = 'smartLock001';
-        status = payload;
-        logMessage = `Smart Lock status: ${status}`;
-        break;
-      
-      case 'home/sensor/motion':
-        deviceId = 'motionSensor001';
-        status = payload;
-        logMessage = `Motion ${status === "DETECTED" ? "detected" : "cleared"}`;
-        logType = status === "DETECTED" ? 'warning' : 'info';
-        break;
-      
-      case 'home/sensor/distance':
-        deviceId = 'ultrasonicSensor001';
-        value = parseFloat(payload);
-        logMessage = `Distance: ${value} cm`;
-        break;
-      
-      case 'home/security/alarm':
-        deviceId = 'siren001';
-        status = payload;
-        logMessage = `Alarm ${status === "ACTIVE" ? "triggered" : "deactivated"}`;
-        logType = status === "ACTIVE" ? 'danger' : 'info';
-        break;
-      
-      case 'home/security/armed':
-        const armedStatus = (payload === "ARMED");
-        await Setting.findOneAndUpdate(
-          { settingName: 'systemArmed' },
-          { value: armedStatus },
-          { upsert: true, new: true }
-        );
-        logMessage = `Security system ${armedStatus ? "armed" : "disarmed"}`;
-        logType = armedStatus ? 'success' : 'info';
-        break;
+        // Update Device states and Log events based on MQTT messages
+        if (topic === 'home/lock/status') {
+            deviceId = 'smartLock001'; // Assuming a fixed ID for your smart lock
+            status = payload; // "LOCKED" or "UNLOCKED"
+            await Device.findOneAndUpdate({ deviceId }, { status, lastActivity: Date.now() }, { upsert: true, new: true });
+            logMessage = `Smart Lock status: ${status}`;
+        } else if (topic === 'home/sensor/motion') {
+            deviceId = 'motionSensor001'; // Assuming a fixed ID for your motion sensor
+            status = payload; // "DETECTED" or "CLEARED"
+            await Device.findOneAndUpdate({ deviceId }, { status, lastActivity: Date.now() }, { upsert: true, new: true });
+            logMessage = `Motion Sensor status: ${status}`;
+            if (status === "DETECTED") logType = 'warning';
+        } else if (topic === 'home/sensor/distance') {
+            deviceId = 'ultrasonicSensor001'; // Assuming a fixed ID for your ultrasonic sensor
+            value = parseFloat(payload);
+            // You might want to set a status like "NEAR" or "FAR" based on distance here
+            await Device.findOneAndUpdate({ deviceId }, { value, lastActivity: Date.now() }, { upsert: true, new: true });
+            logMessage = `Ultrasonic Sensor distance: ${value} cm`;
+        } else if (topic === 'home/security/alarm') {
+            deviceId = 'siren001'; // Assuming a fixed ID for your siren/alarm
+            status = payload; // "ACTIVE" or "INACTIVE"
+            await Device.findOneAndUpdate({ deviceId }, { status, lastActivity: Date.now() }, { upsert: true, new: true });
+            logMessage = `Alarm status: ${status}`;
+            if (status === "ACTIVE") logType = 'danger';
+        } else if (topic === 'home/security/armed') {
+            const armedStatus = (payload === "ARMED");
+            await Setting.findOneAndUpdate({ settingName: 'systemArmed' }, { value: armedStatus }, { upsert: true, new: true });
+            logMessage = `Security system is now: ${payload}`;
+            logType = armedStatus ? 'success' : 'info';
+        }
+
+        if (logMessage) {
+            await Log.create({ message: logMessage, type: logType });
+        }
+
+    } catch (error) {
+        console.error('Error processing MQTT message or updating MongoDB:', error);
+        await Log.create({ message: `Backend error processing MQTT: ${error.message}`, type: 'danger' });
     }
-
-    if (deviceId) {
-      await Device.findOneAndUpdate(
-        { deviceId },
-        { status, value, lastActivity: Date.now() },
-        { upsert: true, new: true }
-      );
-    }
-
-    if (logMessage) {
-      await Log.create({ 
-        message: logMessage, 
-        type: logType,
-        source: 'mqtt',
-        topic
-      });
-    }
-
-  } catch (error) {
-    console.error('❌ Error processing MQTT message:', error);
-    await Log.create({ 
-      message: `Error processing MQTT: ${error.message}`,
-      type: 'danger',
-      source: 'system'
-    });
-  }
 });
 
 mqttClient.on('error', (err) => {
-  console.error('❌ MQTT Error:', err);
-  Log.create({
-    message: `MQTT connection error: ${err.message}`,
-    type: 'danger',
-    source: 'system'
-  });
+    console.error('MQTT Client Error:', err);
 });
 
-// Make MQTT client available to routes
+// Middleware to make mqttClient available to routes/controllers
 app.use((req, res, next) => {
-  req.mqttClient = mqttClient;
-  next();
+    req.mqttClient = mqttClient;
+    next();
 });
 
-// Serve static files from public directory
-app.use(express.static(path.join(__dirname, 'public')));
-
-// API Routes
+// Define API routes
 app.use('/api', apiRoutes);
 
-// Health Check Endpoint
-app.get('/health', (req, res) => {
-  res.status(200).json({
-    status: 'OK',
-    mqtt: mqttClient.connected ? 'connected' : 'disconnected',
-    db: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
-  });
+// Root route for testing
+app.get('/', (req, res) => {
+    res.send('Smart Home Backend API is running!');
 });
 
-// Catch-all route for SPA (must be last)
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-// Error Handling Middleware
-app.use((err, req, res, next) => {
-  console.error('❌ Server Error:', err.stack);
-  res.status(500).json({ 
-    error: 'Internal Server Error',
-    message: err.message 
-  });
-});
-
-// Server Startup
 const PORT = process.env.PORT || 5000;
-const server = app.listen(PORT, async () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  try {
-    await initializeDefaultSettings();
-    console.log('⚙️  Default settings initialized');
-  } catch (err) {
-    console.error('❌ Failed to initialize settings:', err);
-  }
-});
 
-// Graceful Shutdown
-process.on('SIGTERM', () => {
-  console.log('🛑 SIGTERM received. Shutting down gracefully...');
-  server.close(() => {
-    mqttClient.end();
-    mongoose.connection.close(false, () => {
-      console.log('🔴 Server stopped');
-      process.exit(0);
-    });
-  });
+app.listen(PORT, async () => {
+    console.log(`Server running on port ${PORT} in ${process.env.NODE_ENV || 'development'} mode`);
+    await initializeDefaultSettings(); // Initialize default settings on server start
 });

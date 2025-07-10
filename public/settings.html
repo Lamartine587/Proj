@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Home Security - Settings</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body class="min-h-screen">
+    <script>
+        if (!localStorage.getItem('token')) {
+            window.location.href = '/login.html';
+        }
+    </script>
+    <div class="container mx-auto px-4 py-8 max-w-7xl">
+        <header class="flex justify-between items-center mb-8">
+            <h1 class="text-3xl font-bold text-white">Smart Home Security Dashboard</h1>
+            <div class="flex items-center gap-4">
+                <div class="relative">
+                    <button id="notificationsButton" class="p-2 rounded-full hover:bg-gray-700 relative">
+                        <i class="fas fa-bell text-gray-300"></i>
+                        <span id="notificationCount" class="notification-badge hidden">0</span>
+                    </button>
+                </div>
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center text-white">
+                        <i class="fas fa-user"></i>
+                    </div>
+                    <span id="userEmail" class="font-medium">Loading...</span>
+                </div>
+                <button id="logoutBtn" class="btn btn-secondary"><i class="fas fa-sign-out-alt mr-2"></i> Logout</button>
+            </div>
+        </header>
+
+        <nav class="flex border-b border-gray-700 mb-6">
+            <a href="/dashboard.html" class="tab-button">Dashboard</a>
+            <a href="/devices.html" class="tab-button">Devices</a>
+            <a href="/analytics.html" class="tab-button">Analytics</a>
+            <a href="/settings.html" class="tab-button active">Settings</a>
+        </nav>
+
+        <div id="settings">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div class="card lg:col-span-2">
+                    <div class="p-6">
+                        <h2 class="text-xl font-semibold mb-4">System Settings</h2>
+                        <form id="settingsForm" class="space-y-6">
+                            <div>
+                                <label for="systemName" class="block text-sm font-medium text-gray-400 mb-1">System Name</label>
+                                <input type="text" id="systemName" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-white" value="Smart Home Security">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-400 mb-1">Security Mode</label>
+                                <div class="space-y-2">
+                                    <div class="flex items-center">
+                                        <input id="mode-home" name="security-mode" type="radio" class="focus:ring-indigo-500 h-4 w-4 text-indigo-600 border-gray-600 bg-gray-700" checked>
+                                        <label for="mode-home" class="ml-3 block text-sm text-gray-300">Home (Only monitor entry points)</label>
+                                    </div>
+                                    <div class="flex items-center">
+                                        <input id="mode-away" name="security-mode" type="radio" class="focus:ring-indigo-500 h-4 w-4 text-indigo-600 border-gray-600 bg-gray-700">
+                                        <label for="mode-away" class="ml-3 block text-sm text-gray-300">Away (Monitor all areas)</label>
+                                    </div>
+                                    <div class="flex items-center">
+                                        <input id="mode-night" name="security-mode" type="radio" class="focus:ring-indigo-500 h-4 w-4 text-indigo-600 border-gray-600 bg-gray-700">
+                                        <label for="mode-night" class="ml-3 block text-sm text-gray-300">Night (Strict monitoring with alarms)</label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div>
+                                <label for="alarmDuration" class="block text-sm font-medium text-gray-400 mb-1">Alarm Duration (seconds)</label>
+                                <input type="number" id="alarmDuration" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-white" value="30" min="10" max="300">
+                            </div>
+                            <div>
+                                <label for="alarmSound" class="block text-sm font-medium text-gray-400 mb-1">Alarm Sound</label>
+                                <select id="alarmSound" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-white">
+                                    <option>Standard Alarm</option>
+                                    <option>Police Siren</option>
+                                    <option>High Pitch</option>
+                                    <option>Pulsing Alarm</option>
+                                </select>
+                            </div>
+                            <div class="flex items-center">
+                                <input id="enableNotifications" type="checkbox" class="focus:ring-indigo-500 h-4 w-4 text-indigo-600 border-gray-600 bg-gray-700 rounded" checked>
+                                <label for="enableNotifications" class="ml-3 block text-sm text-gray-300">Enable Push Notifications</label>
+                            </div>
+                            <div>
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-save mr-2"></i> Save Settings
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="p-6">
+                        <h2 class="text-xl font-semibold mb-4">User Account</h2>
+                        <div class="space-y-4">
+                            <div>
+                                <h3 class="text-sm font-medium text-gray-400 mb-2">Your Account</h3>
+                                <div id="userAccount" class="flex items-center justify-between p-2 bg-gray-700 rounded">
+                                    <div class="flex items-center">
+                                        <div class="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center text-white">
+                                            <i class="fas fa-user"></i>
+                                        </div>
+                                        <span id="userEmailDisplay" class="ml-2 text-sm font-medium">Loading...</span>
+                                    </div>
+                                    <span id="userRole" class="text-xs bg-indigo-900 text-indigo-200 px-2 py-1 rounded-full">Owner</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="toastContainer"></div>
+    </div>
+
+    <script>
+        const BACKEND_URL = 'http://localhost:3000';
+        const settingsForm = document.getElementById('settingsForm');
+        const notificationsButton = document.getElementById('notificationsButton');
+        const notificationCount = document.getElementById('notificationCount');
+        const toastContainer = document.getElementById('toastContainer');
+        const userEmailEl = document.getElementById('userEmail');
+        const userEmailDisplayEl = document.getElementById('userEmailDisplay');
+        const userRoleEl = document.getElementById('userRole');
+        const logoutBtn = document.getElementById('logoutBtn');
+
+        let unreadNotifications = 0;
+
+        async function initSettings() {
+            await fetchUser();
+            setupEventListeners();
+        }
+
+        async function fetchUser() {
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/auth/me`, {
+                    headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.message || 'Failed to fetch user');
+                userEmailEl.textContent = data.email;
+                userEmailDisplayEl.textContent = data.email;
+                userRoleEl.textContent = data.role;
+            } catch (error) {
+                console.error('Error fetching user:', error);
+                showToast('Failed to load user data', 'error');
+                localStorage.removeItem('token');
+                window.location.href = '/login.html';
+            }
+        }
+
+        function setupEventListeners() {
+            settingsForm.addEventListener('submit', saveSettings);
+            notificationsButton.addEventListener('click', showNotifications);
+            logoutBtn.addEventListener('click', () => {
+                localStorage.removeItem('token');
+                window.location.href = '/login.html';
+            });
+        }
+
+        async function saveSettings(event) {
+            event.preventDefault();
+            try {
+                toggleLoading(true);
+                const settingsData = {
+                    systemName: document.getElementById('systemName').value,
+                    securityMode: document.querySelector('input[name="security-mode"]:checked').id,
+                    alarmDuration: parseInt(document.getElementById('alarmDuration').value, 10),
+                    alarmSound: document.getElementById('alarmSound').value,
+                    enableNotifications: document.getElementById('enableNotifications').checked
+                };
+                const response = await fetch(`${BACKEND_URL}/api/settings`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    },
+                    body: JSON.stringify(settingsData)
+                });
+                if (!response.ok) {
+                    throw new Error('Failed to save settings');
+                }
+                const result = await response.json();
+                showToast('Settings saved successfully!', 'success');
+                console.log('Settings saved:', result);
+            } catch (error) {
+                console.error('Error saving settings:', error);
+                showToast('Failed to save settings!', 'error');
+            } finally {
+                toggleLoading(false);
+            }
+        }
+
+        function showNotifications() {
+            if (unreadNotifications === 0) {
+                showToast('No new notifications', 'info');
+                return;
+            }
+            const notificationList = document.createElement('div');
+            notificationList.className = 'notification-list';
+            for (let i = 0; i < unreadNotifications; i++) {
+                const notificationItem = document.createElement('div');
+                notificationItem.className = 'notification-item';
+                notificationItem.textContent = `Notification ${i + 1}`;
+                notificationList.appendChild(notificationItem);
+            }
+            showToast(notificationList, 'info', true);
+            unreadNotifications = 0;
+            updateNotificationCount();
+        }
+
+        function updateNotificationCount() {
+            notificationCount.textContent = unreadNotifications > 0 ? unreadNotifications : '';
+            notificationsButton.classList.toggle('has-notifications', unreadNotifications > 0);
+        }
+
+        function incrementNotificationCount() {
+            unreadNotifications++;
+            updateNotificationCount();
+        }
+
+        function showToast(message, type = 'info', persistent = false) {
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.innerHTML = `
+                <div class="toast-content">${message}</div>
+                <button class="toast-close" onclick="this.parentElement.remove()">×</button>
+            `;
+            if (!persistent) {
+                setTimeout(() => {
+                    toast.remove();
+                }, 5000);
+            }
+            toastContainer.appendChild(toast);
+            if (type === 'error') {
+                console.error('Toast Error:', message);
+            } else if (type === 'success') {
+                console.log('Toast Success:', message);
+            } else {
+                console.log('Toast Info:', message);
+            }
+        }
+
+        function toggleLoading(show) {
+            const spinner = document.createElement('div');
+            spinner.className = 'spinner';
+            spinner.style.display = show ? 'block' : 'none';
+            settingsForm.appendChild(spinner);
+        }
+
+        document.addEventListener('DOMContentLoaded', initSettings);
+    </script>
+</body>
+</html>

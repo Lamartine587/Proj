@@ -1,1 +1,3 @@
 npm install express mongoose mqtt cors dotenv
+
+mongodb+srv://h74205311:yjILeVdgifjFhjvm@mydatabases.r29yeuu.mongodb.net/new?retryWrites=true&w=majority

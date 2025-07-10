@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Home Security - Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body class="min-h-screen">
+    <script>
+        if (!localStorage.getItem('token')) {
+            window.location.href = '/login.html';
+        }
+    </script>
+    <div class="container mx-auto px-4 py-8 max-w-7xl">
+        <header class="flex justify-between items-center mb-8">
+            <h1 class="text-3xl font-bold text-white">Smart Home Security Dashboard</h1>
+            <div class="flex items-center gap-4">
+                <div class="relative">
+                    <button id="notificationsButton" class="p-2 rounded-full hover:bg-gray-700 relative">
+                        <i class="fas fa-bell text-gray-300"></i>
+                        <span id="notificationCount" class="notification-badge hidden">0</span>
+                    </button>
+                </div>
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center text-white">
+                        <i class="fas fa-user"></i>
+                    </div>
+                    <span id="userEmail" class="font-medium">Loading...</span>
+                </div>
+                <button id="logoutBtn" class="btn btn-secondary"><i class="fas fa-sign-out-alt mr-2"></i> Logout</button>
+            </div>
+        </header>
+
+        <nav class="flex border-b border-gray-700 mb-6">
+            <a href="/dashboard.html" class="tab-button active">Dashboard</a>
+            <a href="/devices.html" class="tab-button">Devices</a>
+            <a href="/analytics.html" class="tab-button">Analytics</a>
+            <a href="/settings.html" class="tab-button">Settings</a>
+        </nav>
+
+        <div id="dashboard">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+                <div class="card col-span-1 lg:col-span-2">
+                    <div class="p-6">
+                        <h2 class="text-xl font-semibold mb-4">Home Security</h2>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <h3 class="text-sm font-medium text-gray-400 mb-1">Security System</h3>
+                                <div id="armedStatus" class="status-badge status-disarmed">Off</div>
+                            </div>
+                            <div>
+                                <h3 class="text-sm font-medium text-gray-400 mb-1">Alarm</h3>
+                                <div id="alarmStatus" class="status-badge status-inactive">Off</div>
+                            </div>
+                            <div>
+                                <h3 class="text-sm font-medium text-gray-400 mb-1">Front Door</h3>
+                                <div id="lockStatus" class="status-badge status-locked">Locked</div>
+                            </div>
+                            <div>
+                                <h3 class="text-sm font-medium text-gray-400 mb-1">Motion Detector</h3>
+                                <div id="motionStatus" class="status-badge status-cleared">No Motion</div>
+                            </div>
+                        </div>
+                        <div class="mt-6 grid grid-cols-2 gap-4">
+                            <button id="armBtn" class="btn btn-success">
+                                <i class="fas fa-lock mr-2"></i> Turn Security On
+                            </button>
+                            <button id="disarmBtn" class="btn btn-danger">
+                                <i class="fas fa-lock-open mr-2"></i> Turn Security Off
+                            </button>
+                            <button id="lockBtn" class="btn btn-warning">
+                                <i class="fas fa-door-closed mr-2"></i> Lock Door
+                            </button>
+                            <button id="unlockBtn" class="btn btn-primary">
+                                <i class="fas fa-door-open mr-2"></i> Unlock Door
+                            </button>
+                        </div>
+                        <div id="loadingSpinner" class="spinner mt-4"></div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="p-6">
+                        <h2 class="text-xl font-semibold mb-4">Proximity Sensor</h2>
+                        <p class="text-sm text-gray-400 mb-2">Measures how close objects are to the sensor</p>
+                        <div class="flex items-end mb-2">
+                            <span id="distanceValue" class="text-3xl font-bold mr-2">0</span>
+                            <span class="text-gray-400 mb-1">cm</span>
+                        </div>
+                        <div class="distance-indicator mb-4">
+                            <div id="distanceMarker" class="distance-marker"></div>
+                        </div>
+                        <div class="flex justify-between text-xs text-gray-400">
+                            <span>0cm</span>
+                            <span>50cm</span>
+                            <span>100cm</span>
+                        </div>
+                        <div class="mt-4">
+                            <h3 class="text-sm font-medium text-gray-400 mb-1">Status</h3>
+                            <div id="distanceStatus" class="status-badge status-inactive">Safe</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div class="card">
+                    <div class="p-6">
+                        <h2 class="text-xl font-semibold mb-4">Alerts</h2>
+                        <div id="alertsContainer" class="space-y-3">
+                            <div class="text-center text-gray-500 py-4">
+                                No active alerts
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card col-span-1 lg:col-span-2">
+                    <div class="p-6">
+                        <div class="flex justify-between items-center mb-4">
+                            <h2 class="text-xl font-semibold">Recent Activity</h2>
+                            <button id="clearLogsBtn" class="btn btn-secondary btn-sm">
+                                <i class="fas fa-trash mr-1"></i> Clear Activity
+                            </button>
+                        </div>
+                        <div id="activityLog" class="activity-log">
+                            <div class="text-center text-gray-500 py-4">Loading activity...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="toastContainer"></div>
+    </div>
+
+    <script>
+        const BACKEND_URL = 'http://localhost:3000';
+        const POLL_INTERVAL = 2000;
+        const DISTANCE_WARNING_THRESHOLD = 30;
+        const DISTANCE_DANGER_THRESHOLD = 15;
+
+        const armedStatusEl = document.getElementById('armedStatus');
+        const lockStatusEl = document.getElementById('lockStatus');
+        const motionStatusEl = document.getElementById('motionStatus');
+        const distanceValueEl = document.getElementById('distanceValue');
+        const distanceMarkerEl = document.getElementById('distanceMarker');
+        const distanceStatusEl = document.getElementById('distanceStatus');
+        const alarmStatusEl = document.getElementById('alarmStatus');
+        const activityLogEl = document.getElementById('activityLog');
+        const alertsContainer = document.getElementById('alertsContainer');
+        const armBtn = document.getElementById('armBtn');
+        const disarmBtn = document.getElementById('disarmBtn');
+        const lockBtn = document.getElementById('lockBtn');
+        const unlockBtn = document.getElementById('unlockBtn');
+        const clearLogsBtn = document.getElementById('clearLogsBtn');
+        const notificationsButton = document.getElementById('notificationsButton');
+        const notificationCount = document.getElementById('notificationCount');
+        const loadingSpinner = document.getElementById('loadingSpinner');
+        const toastContainer = document.getElementById('toastContainer');
+        const userEmailEl = document.getElementById('userEmail');
+        const logoutBtn = document.getElementById('logoutBtn');
+
+        let systemStatus = { armed: false, lock: 'LOCKED', motion: 'CLEARED', distance: 0, alarm: 'INACTIVE' };
+        let unreadNotifications = 0;
+        let lastLogMessage = null;
+        let pollingInterval;
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        async function initDashboard() {
+            await fetchUser();
+            setupEventListeners();
+            fetchSystemStatus();
+            startPolling();
+        }
+
+        async function fetchUser() {
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/auth/me`, {
+                    headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.message || 'Failed to fetch user');
+                userEmailEl.textContent = data.email;
+            } catch (error) {
+                console.error('Error fetching user:', error);
+                showToast('Failed to load user data', 'error');
+                localStorage.removeItem('token');
+                window.location.href = '/login.html';
+            }
+        }
+
+        function setupEventListeners() {
+            armBtn.addEventListener('click', () => sendCommand('ARM'));
+            disarmBtn.addEventListener('click', () => sendCommand('DISARM'));
+            lockBtn.addEventListener('click', () => sendCommand('LOCK'));
+            unlockBtn.addEventListener('click', () => sendCommand('UNLOCK'));
+            clearLogsBtn.addEventListener('click', clearLogs);
+            notificationsButton.addEventListener('click', showNotifications);
+            logoutBtn.addEventListener('click', () => {
+                localStorage.removeItem('token');
+                window.location.href = '/login.html';
+            });
+        }
+
+        function startPolling() {
+            if (pollingInterval) clearInterval(pollingInterval);
+            pollingInterval = setInterval(fetchSystemStatus, POLL_INTERVAL);
+        }
+
+        async function fetchSystemStatus() {
+            try {
+                toggleLoading(true);
+                const [settingsRes, devicesRes, logsRes] = await Promise.all([
+                    fetch(`${BACKEND_URL}/api/settings`, { headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } }),
+                    fetch(`${BACKEND_URL}/api/devices`, { headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } }),
+                    fetch(`${BACKEND_URL}/api/logs`, { headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } })
+                ]);
+
+                if (!settingsRes.ok || !devicesRes.ok || !logsRes.ok) {
+                    throw new Error('Failed to fetch system data');
+                }
+
+                const [settings, devices, logs] = await Promise.all([
+                    settingsRes.json(),
+                    devicesRes.json(),
+                    logsRes.json()
+                ]);
+
+                updateSystemStatus(settings, devices);
+                updateActivityLog(logs);
+            } catch (error) {
+                console.error('Error fetching system status:', error);
+                showToast('Failed to connect to system!', 'error');
+            } finally {
+                toggleLoading(false);
+            }
+        }
+
+        function updateSystemStatus(settings, devices) {
+            const systemArmedSetting = settings.find(s => s.settingName === 'systemArmed');
+            if (systemArmedSetting) {
+                systemStatus.armed = systemArmedSetting.value;
+                armedStatusEl.textContent = systemStatus.armed ? 'On' : 'Off';
+                armedStatusEl.className = `status-badge ${systemStatus.armed ? 'status-armed' : 'status-disarmed'}`;
+            }
+
+            devices.forEach(device => {
+                switch (device.deviceId) {
+                    case 'smartLock001':
+                        systemStatus.lock = device.status;
+                        lockStatusEl.textContent = systemStatus.lock === 'LOCKED' ? 'Locked' : 'Unlocked';
+                        lockStatusEl.className = `status-badge ${systemStatus.lock === 'LOCKED' ? 'status-locked' : 'status-unlocked'}`;
+                        break;
+                    case 'motionSensor001':
+                        systemStatus.motion = device.status;
+                        motionStatusEl.textContent = systemStatus.motion === 'DETECTED' ? 'Motion Detected' : 'No Motion';
+                        motionStatusEl.className = `status-badge ${systemStatus.motion === 'DETECTED' ? 'status-detected' : 'status-cleared'}`;
+                        break;
+                    case 'ultrasonicSensor001':
+                        systemStatus.distance = device.value || 0;
+                        distanceValueEl.textContent = systemStatus.distance;
+                        updateDistanceIndicator(systemStatus.distance);
+                        break;
+                    case 'siren001':
+                        systemStatus.alarm = device.status;
+                        alarmStatusEl.textContent = systemStatus.alarm === 'ACTIVE' ? 'On' : 'Off';
+                        alarmStatusEl.className = `status-badge ${systemStatus.alarm === 'ACTIVE' ? 'status-active' : 'status-inactive'}`;
+                        break;
+                }
+            });
+        }
+
+        function updateDistanceIndicator(distance) {
+            const displayDistance = Math.min(distance, 100);
+            const markerPosition = (displayDistance / 100) * 100;
+            distanceMarkerEl.style.left = `${markerPosition}%`;
+
+            if (distance <= DISTANCE_DANGER_THRESHOLD && distance > 0) {
+                distanceStatusEl.textContent = 'Too Close';
+                distanceStatusEl.className = 'status-badge status-active';
+            } else if (distance <= DISTANCE_WARNING_THRESHOLD && distance > 0) {
+                distanceStatusEl.textContent = 'Close';
+                distanceStatusEl.className = 'status-badge status-warning';
+            } else {
+                distanceStatusEl.textContent = 'Safe';
+                distanceStatusEl.className = 'status-badge status-inactive';
+            }
+        }
+
+        function updateActivityLog(logs) {
+            if (logs.length === 0) {
+                activityLogEl.innerHTML = '<div class="text-center text-gray-500 py-4">No recent activity</div>';
+                return;
+            }
+
+            const currentLogCount = activityLogEl.children.length;
+            if (currentLogCount > 1 && currentLogCount === logs.length) {
+                return;
+            }
+
+            activityLogEl.innerHTML = '';
+            logs.forEach(log => {
+                addLogEntry(log);
+            });
+        }
+
+        function addLogEntry(log) {
+            const logDiv = document.createElement('div');
+            const timestamp = new Date(log.timestamp).toLocaleTimeString();
+            let icon, displayMessage;
+
+            // Map technical log messages to simple language
+            if (log.message.includes('Smart Lock status: LOCKED')) {
+                displayMessage = 'Front Door locked';
+            } else if (log.message.includes('Smart Lock status: UNLOCKED')) {
+                displayMessage = 'Front Door unlocked';
+            } else if (log.message.includes('Motion Sensor status: DETECTED')) {
+                displayMessage = 'Motion detected';
+            } else if (log.message.includes('Motion Sensor status: CLEARED')) {
+                displayMessage = 'No motion detected';
+            } else if (log.message.includes('Alarm status: ACTIVE')) {
+                displayMessage = 'Alarm turned on';
+            } else if (log.message.includes('Alarm status: INACTIVE')) {
+                displayMessage = 'Alarm turned off';
+            } else if (log.message.includes('Security system is now: ARMED')) {
+                displayMessage = 'Security system turned on';
+            } else if (log.message.includes('Security system is now: DISARMED')) {
+                displayMessage = 'Security system turned off';
+            } else if (log.message.includes('Authorized Tag')) {
+                displayMessage = 'Valid key card scanned';
+            } else if (log.message.includes('Unauthorized Tag')) {
+                displayMessage = 'Invalid key card scanned';
+            } else if (log.message.includes('Ultrasonic Sensor distance')) {
+                const distance = log.message.match(/[\d.]+/);
+                displayMessage = `Object ${distance ? distance[0] : 'unknown'} cm away`;
+            } else if (log.message.includes('Smart Light status: ON')) {
+                displayMessage = 'Light turned on';
+            } else if (log.message.includes('Smart Light status: OFF')) {
+                displayMessage = 'Light turned off';
+            } else {
+                displayMessage = log.message; // Fallback for unmapped messages
+            }
+
+            switch (log.type) {
+                case 'danger':
+                case 'critical':
+                    icon = 'fa-exclamation-circle';
+                    break;
+                case 'warning':
+                    icon = 'fa-exclamation-triangle';
+                    break;
+                case 'success':
+                    icon = 'fa-check-circle';
+                    break;
+                default:
+                    icon = 'fa-info-circle';
+            }
+
+            logDiv.className = `log-entry log-${log.type}`;
+            logDiv.innerHTML = `
+                <span class="log-time">${timestamp}</span>
+                <i class="log-icon fas ${icon}"></i>
+                <span class="log-message">${displayMessage}</span>
+            `;
+            activityLogEl.prepend(logDiv);
+
+            if (displayMessage === 'Valid key card scanned' && displayMessage !== lastLogMessage) {
+                playBeep(1);
+                showToast('Valid key card scanned!', 'success');
+                lastLogMessage = displayMessage;
+                incrementNotificationCount();
+            } else if (displayMessage === 'Invalid key card scanned' && displayMessage !== lastLogMessage) {
+                playBeep(3);
+                showToast('Invalid key card detected!', 'error');
+                lastLogMessage = displayMessage;
+                incrementNotificationCount();
+            } else if (displayMessage === 'Alarm turned on' && displayMessage !== lastLogMessage) {
+                playBeep(5);
+                showToast('Alarm triggered!', 'error');
+                lastLogMessage = displayMessage;
+                incrementNotificationCount();
+            } else if (displayMessage === 'Security system turned on' && displayMessage !== lastLogMessage) {
+                playBeep(2);
+                showToast('Security system turned on!', 'success');
+                lastLogMessage = displayMessage;
+            } else if (displayMessage === 'Security system turned off' && displayMessage !== lastLogMessage) {
+                playBeep(2);
+                showToast('Security system turned off!', 'success');
+                lastLogMessage = displayMessage;
+            }
+        }
+
+        async function sendCommand(command) {
+            try {
+                toggleLoading(true);
+                const response = await fetch(`${BACKEND_URL}/api/commands`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    },
+                    body: JSON.stringify({ command })
+                });
+                if (!response.ok) {
+                    throw new Error('Failed to send command');
+                }
+                const result = await response.json();
+                showToast(`Command "${command.toLowerCase()}" sent successfully!`, 'success');
+                fetchSystemStatus();
+            } catch (error) {
+                console.error('Error sending command:', error);
+                showToast('Failed to send command!', 'error');
+            } finally {
+                toggleLoading(false);
+            }
+        }
+
+        async function clearLogs() {
+            try {
+                toggleLoading(true);
+                const response = await fetch(`${BACKEND_URL}/api/logs/clear`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+                });
+                if (!response.ok) {
+                    throw new Error('Failed to clear logs');
+                }
+                activityLogEl.innerHTML = '<div class="text-center text-gray-500 py-4">No recent activity</div>';
+                showToast('Activity cleared successfully!', 'success');
+            } catch (error) {
+                console.error('Error clearing logs:', error);
+                showToast('Failed to clear activity!', 'error');
+            } finally {
+                toggleLoading(false);
+            }
+        }
+
+        function showNotifications() {
+            if (unreadNotifications === 0) {
+                showToast('No new notifications', 'info');
+                return;
+            }
+            const notificationList = document.createElement('div');
+            notificationList.className = 'notification-list';
+            for (let i = 0; i < unreadNotifications; i++) {
+                const notificationItem = document.createElement('div');
+                notificationItem.className = 'notification-item';
+                notificationItem.textContent = `Notification ${i + 1}`;
+                notificationList.appendChild(notificationItem);
+            }
+            showToast(notificationList, 'info', true);
+            unreadNotifications = 0;
+            updateNotificationCount();
+        }
+
+        function updateNotificationCount() {
+            notificationCount.textContent = unreadNotifications > 0 ? unreadNotifications : '';
+            notificationsButton.classList.toggle('has-notifications', unreadNotifications > 0);
+        }
+
+        function incrementNotificationCount() {
+            unreadNotifications++;
+            updateNotificationCount();
+        }
+
+        function showToast(message, type = 'info', persistent = false) {
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.innerHTML = `
+                <div class="toast-content">${typeof message === 'string' ? message : message.outerHTML}</div>
+                <button class="toast-close" onclick="this.parentElement.remove()">×</button>
+            `;
+            if (!persistent) {
+                setTimeout(() => {
+                    toast.remove();
+                }, 5000);
+            }
+            toastContainer.appendChild(toast);
+            if (type === 'error') {
+                console.error('Toast Error:', message);
+            } else if (type === 'success') {
+                console.log('Toast Success:', message);
+            } else {
+                console.log('Toast Info:', message);
+            }
+        }
+
+        function toggleLoading(show) {
+            loadingSpinner.style.display = show ? 'block' : 'none';
+        }
+
+        function playBeep(count) {
+            const beepDuration = 100;
+            const beepFrequency = 440;
+            const oscillator = audioCtx.createOscillator();
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(beepFrequency, audioCtx.currentTime);
+            oscillator.connect(audioCtx.destination);
+            for (let i = 0; i < count; i++) {
+                setTimeout(() => {
+                    oscillator.start();
+                    setTimeout(() => {
+                        oscillator.stop();
+                    }, beepDuration);
+                }, i * beepDuration * 2);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', initDashboard);
+    </script>
+</body>
+</html>

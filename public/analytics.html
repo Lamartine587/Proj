@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Home Security - Analytics</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body class="min-h-screen">
+    <script>
+        if (!localStorage.getItem('token')) {
+            window.location.href = '/login.html';
+        }
+    </script>
+    <div class="container mx-auto px-4 py-8 max-w-7xl">
+        <header class="flex justify-between items-center mb-8">
+            <h1 class="text-3xl font-bold text-white">Smart Home Security Dashboard</h1>
+            <div class="flex items-center gap-4">
+                <div class="relative">
+                    <button id="notificationsButton" class="p-2 rounded-full hover:bg-gray-700 relative">
+                        <i class="fas fa-bell text-gray-300"></i>
+                        <span id="notificationCount" class="notification-badge hidden">0</span>
+                    </button>
+                </div>
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center text-white">
+                        <i class="fas fa-user"></i>
+                    </div>
+                    <span id="userEmail" class="font-medium">Loading...</span>
+                </div>
+                <button id="logoutBtn" class="btn btn-secondary"><i class="fas fa-sign-out-alt mr-2"></i> Logout</button>
+            </div>
+        </header>
+
+        <nav class="flex border-b border-gray-700 mb-6">
+            <a href="/dashboard.html" class="tab-button">Dashboard</a>
+            <a href="/devices.html" class="tab-button">Devices</a>
+            <a href="/analytics.html" class="tab-button active">Analytics</a>
+            <a href="/settings.html" class="tab-button">Settings</a>
+        </nav>
+
+        <div id="analytics">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                <div class="card">
+                    <div class="p-6">
+                        <h2 class="text-xl font-semibold mb-4">Security Events</h2>
+                        <canvas id="securityEventsChart" height="300"></canvas>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="p-6">
+                        <h2 class="text-xl font-semibold mb-4">Device Activity</h2>
+                        <canvas id="deviceActivityChart" height="300"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="p-6">
+                    <h2 class="text-xl font-semibold mb-4">Motion Detection History</h2>
+                    <canvas id="motionHistoryChart" height="150"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div id="toastContainer"></div>
+    </div>
+
+    <script>
+        const BACKEND_URL = 'http://localhost:3000';
+        let securityEventsChart, deviceActivityChart, motionHistoryChart;
+        const notificationsButton = document.getElementById('notificationsButton');
+        const notificationCount = document.getElementById('notificationCount');
+        const toastContainer = document.getElementById('toastContainer');
+        const userEmailEl = document.getElementById('userEmail');
+        const logoutBtn = document.getElementById('logoutBtn');
+
+        let unreadNotifications = 0;
+
+        async function initAnalytics() {
+            await fetchUser();
+            setupEventListeners();
+            initCharts();
+        }
+
+        async function fetchUser() {
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/auth/me`, {
+                    headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.message || 'Failed to fetch user');
+                userEmailEl.textContent = data.email;
+            } catch (error) {
+                console.error('Error fetching user:', error);
+                showToast('Failed to load user data', 'error');
+                localStorage.removeItem('token');
+                window.location.href = '/login.html';
+            }
+        }
+
+        function setupEventListeners() {
+            notificationsButton.addEventListener('click', showNotifications);
+            logoutBtn.addEventListener('click', () => {
+                localStorage.removeItem('token');
+                window.location.href = '/login.html';
+            });
+        }
+
+        function initCharts() {
+            const ctxSecurityEvents = document.getElementById('securityEventsChart').getContext('2d');
+            securityEventsChart = new Chart(ctxSecurityEvents, {
+                type: 'line',
+                data: {
+                    labels: ['0', '1', '2', '3', '4', '5'],
+                    datasets: [{
+                        label: 'Security Events',
+                        data: [12, 19, 3, 5, 2, 3],
+                        backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                        borderColor: 'rgba(75, 192, 192, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: { beginAtZero: true, ticks: { color: '#9CA3AF' } },
+                        x: { ticks: { color: '#9CA3AF' } }
+                    },
+                    plugins: {
+                        legend: { labels: { color: '#9CA3AF' } },
+                        tooltip: {
+                            backgroundColor: '#1F2937',
+                            titleColor: '#F3F4F6',
+                            bodyColor: '#D1D5DB',
+                            borderColor: '#374151',
+                            borderWidth: 1
+                        }
+                    }
+                }
+            });
+
+            const ctxDeviceActivity = document.getElementById('deviceActivityChart').getContext('2d');
+            deviceActivityChart = new Chart(ctxDeviceActivity, {
+                type: 'bar',
+                data: {
+                    labels: ['Device 1', 'Device 2', 'Device 3', 'Device 4'],
+                    datasets: [{
+                        label: 'Activity',
+                        data: [65, 59, 80, 81],
+                        backgroundColor: [
+                            'rgba(255, 99, 132, 0.2)',
+                            'rgba(54, 162, 235, 0.2)',
+                            'rgba(255, 206, 86, 0.2)',
+                            'rgba(75, 192, 192, 0.2)'
+                        ],
+                        borderColor: [
+                            'rgba(255, 99, 132, 1)',
+                            'rgba(54, 162, 235, 1)',
+                            'rgba(255, 206, 86, 1)',
+                            'rgba(75, 192, 192, 1)'
+                        ],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: { beginAtZero: true, ticks: { color: '#9CA3AF' } },
+                        x: { ticks: { color: '#9CA3AF' } }
+                    },
+                    plugins: {
+                        legend: { labels: { color: '#9CA3AF' } },
+                        tooltip: {
+                            backgroundColor: '#1F2937',
+                            titleColor: '#F3F4F6',
+                            bodyColor: '#D1D5DB',
+                            borderColor: '#374151',
+                            borderWidth: 1
+                        }
+                    }
+                }
+            });
+
+            const ctxMotionHistory = document.getElementById('motionHistoryChart').getContext('2d');
+            motionHistoryChart = new Chart(ctxMotionHistory, {
+                type: 'line',
+                data: {
+                    labels: ['0', '1', '2', '3', '4', '5'],
+                    datasets: [{
+                        label: 'Motion Detected',
+                        data: [12, 19, 3, 5, 2, 3],
+                        backgroundColor: 'rgba(153, 102, 255, 0.2)',
+                        borderColor: 'rgba(153, 102, 255, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: { beginAtZero: true, ticks: { color: '#9CA3AF' } },
+                        x: { ticks: { color: '#9CA3AF' } }
+                    },
+                    plugins: {
+                        legend: { labels: { color: '#9CA3AF' } },
+                        tooltip: {
+                            backgroundColor: '#1F2937',
+                            titleColor: '#F3F4F6',
+                            bodyColor: '#D1D5DB',
+                            borderColor: '#374151',
+                            borderWidth: 1
+                        }
+                    }
+                }
+            });
+        }
+
+        function showNotifications() {
+            if (unreadNotifications === 0) {
+                showToast('No new notifications', 'info');
+                return;
+            }
+            const notificationList = document.createElement('div');
+            notificationList.className = 'notification-list';
+            for (let i = 0; i < unreadNotifications; i++) {
+                const notificationItem = document.createElement('div');
+                notificationItem.className = 'notification-item';
+                notificationItem.textContent = `Notification ${i + 1}`;
+                notificationList.appendChild(notificationItem);
+            }
+            showToast(notificationList, 'info', true);
+            unreadNotifications = 0;
+            updateNotificationCount();
+        }
+
+        function updateNotificationCount() {
+            notificationCount.textContent = unreadNotifications > 0 ? unreadNotifications : '';
+            notificationsButton.classList.toggle('has-notifications', unreadNotifications > 0);
+        }
+
+        function incrementNotificationCount() {
+            unreadNotifications++;
+            updateNotificationCount();
+        }
+
+        function showToast(message, type = 'info', persistent = false) {
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.innerHTML = `
+                <div class="toast-content">${message}</div>
+                <button class="toast-close" onclick="this.parentElement.remove()">×</button>
+            `;
+            if (!persistent) {
+                setTimeout(() => {
+                    toast.remove();
+                }, 5000);
+            }
+            toastContainer.appendChild(toast);
+            if (type === 'error') {
+                console.error('Toast Error:', message);
+            } else if (type === 'success') {
+                console.log('Toast Success:', message);
+            } else {
+                console.log('Toast Info:', message);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', initAnalytics);
+    </script>
+</body>
+</html>

@@ -66,23 +66,20 @@ async function fetchConfig() {
     try {
         const response = await fetch(CONFIG_URL, { timeout: 5000 });
         if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
-        // Assuming your /api/config endpoint returns { serverIp: 'your_backend_url', mqttBroker: 'your_mqtt_url' }
-        // or directly { backendUrl: '...', mqttBroker: '...' }
+        
         const config = await response.json();
+        console.log('Received config from API:', config); // Log what you actually get
 
-        // Adjust this logic based on what your /api/config actually returns.
-        // If it returns 'serverIp', construct URLs:
-        if (config.serverIp) {
-            BACKEND_URL = `https://${config.serverIp}`; // Use https for Render backend
-            // Ensure config.mqttBrokerUrl is used if available, otherwise construct from serverIp
-            MQTT_BROKER = config.mqttBrokerUrl || `mqtts://${config.serverIp}:8883`;
-        } else if (config.backendUrl && config.mqttBroker) {
-            // If your /api/config directly provides full URLs:
-            BACKEND_URL = config.backendUrl;
-            MQTT_BROKER = config.mqttBroker;
+        // --- FIXED LOGIC FOR CONFIG PARSING ---
+        // Your backend /api/config returns { backendHost: "...", mqttBrokerClientUrl: "..." }
+        if (config.backendHost && config.mqttBrokerClientUrl) {
+            BACKEND_URL = `https://${config.backendHost}`; // Construct full URL with HTTPS
+            MQTT_BROKER = config.mqttBrokerClientUrl; // Use directly
         } else {
-            throw new Error('Invalid config format received from API');
+            // This error will now only be thrown if the expected keys are truly missing
+            throw new Error('Invalid config format received from API: Missing backendHost or mqttBrokerClientUrl');
         }
+        // --- END FIXED LOGIC ---
 
         console.log(`Fetched config: BACKEND_URL=${BACKEND_URL}, MQTT_BROKER=${MQTT_BROKER}`);
     } catch (error) {
@@ -180,40 +177,40 @@ function handleMqttMessage(topic, message) {
     if (logMessageText === 'Valid key card scanned') {
         playBeep(1);
         showToast('Valid key card scanned!', 'success');
-        speak('Valid key card scanned!'); // NEW: Spoken feedback
+        speak('Valid key card scanned!');
         if (typeof incrementNotificationCount === 'function') incrementNotificationCount();
     } else if (logMessageText === 'Invalid key card scanned') {
         playBeep(3);
         showToast('Invalid key card detected!', 'error');
-        speak('Invalid key card detected!'); // NEW: Spoken feedback
+        speak('Invalid key card detected!');
         if (typeof incrementNotificationCount === 'function') incrementNotificationCount();
     } else if (logMessageText === 'Alarm turned off') {
         playBeep(2);
         showToast('Alarm turned off!', 'success');
-        speak('Alarm turned off.'); // NEW: Spoken feedback
+        speak('Alarm turned off.');
         if (typeof incrementNotificationCount === 'function') incrementNotificationCount();
     } else if (logMessageText === 'Alarm turned on') {
         playBeep(5);
         showToast('Alarm triggered!', 'error', true);
-        speak('Warning! Alarm triggered!'); // NEW: Spoken feedback
+        speak('Warning! Alarm triggered!');
         if (typeof incrementNotificationCount === 'function') incrementNotificationCount();
     } else if (logMessageText === 'Security system turned on') {
         playBeep(2);
         showToast('Security system turned on!', 'success');
-        speak('Security system turned on.'); // NEW: Spoken feedback
+        speak('Security system turned on.');
     } else if (logMessageText === 'Security system turned off') {
         playBeep(2);
         showToast('Security system turned off!', 'success');
-        speak('Security system turned off.'); // NEW: Spoken feedback
+        speak('Security system turned off.');
     } else if (logMessageText === 'Door unlocked by RFID at close distance') {
         playBeep(2);
         showToast('Door unlocked by RFID at close distance!', 'success');
-        speak('Door unlocked by key card at close distance.'); // NEW: Spoken feedback
+        speak('Door unlocked by key card at close distance.');
         if (typeof incrementNotificationCount === 'function') incrementNotificationCount();
     } else if (logMessageText === 'Motion detected') {
         playBeep(1);
         showToast('Motion detected!', 'warning');
-        speak('Motion detected.'); // NEW: Spoken feedback
+        speak('Motion detected.');
         if (typeof incrementNotificationCount === 'function') incrementNotificationCount();
     }
 }
@@ -324,7 +321,7 @@ async function fetchUser() {
     } catch (error) {
         console.error('Error fetching user:', error);
         showToast('Failed to load user data. Please check server connectivity.', 'error');
-        speak('Failed to load user data. Please check server connectivity.'); // NEW: Spoken feedback for critical error
+        speak('Failed to load user data. Please check server connectivity.');
         localStorage.removeItem('token');
         window.location.href = '/index.html';
     }
@@ -345,13 +342,13 @@ async function sendCommand(command, callback) {
         const result = await response.json();
         const message = `Command "${command.toLowerCase()}" sent successfully!`;
         showToast(message, 'success');
-        speak(message); // NEW: Spoken feedback
+        speak(message);
         if (callback) callback();
     } catch (error) {
         console.error('Error sending command:', error);
         const message = 'Failed to send command. Please check server connectivity.';
         showToast(message, 'error');
-        speak(message); // NEW: Spoken feedback
+        speak(message);
     }
 }
 
@@ -370,13 +367,13 @@ async function clearLogs(callback) {
         }
         const message = 'Activity cleared successfully!';
         showToast(message, 'success');
-        speak(message); // NEW: Spoken feedback
+        speak(message);
         if (callback) callback();
     } catch (error) {
         console.error('Error clearing logs:', error);
         const message = 'Failed to clear activity. Please check server connectivity.';
         showToast(message, 'error');
-        speak(message); // NEW: Spoken feedback
+        speak(message);
     }
 }
 
@@ -428,6 +425,8 @@ function showToast(message, type = 'info', persistent = false) {
         }, 5000);
     }
 }
+
+// Function to toggle loading spinner visibility
 function toggleLoading(show) {
     const loadingSpinner = document.getElementById('loadingSpinner');
     if (loadingSpinner) {
@@ -441,6 +440,7 @@ function toggleLoading(show) {
         }
     }
 }
+
 
 /**
  * Plays a simple beep sound.

@@ -1,29 +1,108 @@
+/* Base Styles & Variables */
 :root {
-    --primary: #3b82f6;
-    --primary-dark: #2563eb;
-    --danger: #ef4444;
-    --danger-dark: #dc2626;
-    --success: #10b981;
-    --success-dark: #059669;
-    --warning: #f59e0b;
-    --warning-dark: #d97706;
-    --info: #06b6d4;
-    --info-dark: #0891b2;
+    /* Primary brand colors */
+    --primary: #3b82f6; /* Blue 500 */
+    --primary-dark: #2563eb; /* Blue 600 */
+    --primary-light: #60a5fa; /* Blue 400 */
+
+    /* Status colors */
+    --danger: #ef4444; /* Red 500 */
+    --danger-dark: #dc2626; /* Red 600 */
+    --danger-light: #f87171; /* Red 400 */
+
+    --success: #10b981; /* Green 500 */
+    --success-dark: #059669; /* Green 600 */
+    --success-light: #34d399; /* Green 400 */
+
+    --warning: #f59e0b; /* Amber 500 */
+    --warning-dark: #d97706; /* Amber 600 */
+    --warning-light: #fbbf24; /* Amber 400 */
+
+    --info: #06b6d4; /* Cyan 500 */
+    --info-dark: #0891b2; /* Cyan 600 */
+    --info-light: #22d3ee; /* Cyan 400 */
+
+    /* Grayscale palette for background, text, borders */
+    --gray-900: #111827; /* Darkest background */
+    --gray-800: #1f2937; /* Card background, primary surface */
+    --gray-700: #374151; /* Border, input background, secondary surface */
+    --gray-600: #4b5563; /* Secondary button, scroll track */
+    --gray-500: #6b7280; /* Placeholder text, inactive elements */
+    --gray-400: #9ca3af; /* Secondary text */
+    --gray-300: #d1d5db; /* Icon color */
+    --gray-100: #f3f4f6; /* Default text color */
+    --white: #ffffff;
 }
 
 body {
     font-family: 'Inter', sans-serif;
-    background-color: #111827;
-    color: #f3f4f6;
+    background-color: var(--gray-900);
+    color: var(--gray-100);
     min-height: 100vh;
+    line-height: 1.6; /* Improved readability */
+    margin: 0;
+    -webkit-font-smoothing: antialiased; /* Smoother fonts on WebKit browsers */
+    -moz-osx-font-smoothing: grayscale; /* Smoother fonts on Firefox */
 }
 
+/* Global Container for page content */
+.container {
+    max-width: 80rem; /* Equivalent to Tailwind's max-w-7xl */
+    margin-left: auto;
+    margin-right: auto;
+    padding: 2rem 1rem; /* py-8 px-4 */
+}
+
+/* Header Section */
+header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem; /* mb-8 */
+}
+
+h1 {
+    font-size: 2.25rem; /* text-3xl */
+    font-weight: 700; /* font-bold */
+    color: var(--white);
+}
+
+/* Navigation Tabs */
+nav.flex {
+    border-bottom: 1px solid var(--gray-700);
+    margin-bottom: 1.5rem; /* mb-6 */
+}
+
+.tab-button {
+    padding: 0.75rem 1.5rem;
+    border: none;
+    background: none;
+    cursor: pointer;
+    font-weight: 500;
+    color: var(--gray-400);
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s ease;
+    text-decoration: none; /* Ensure links don't have underlines */
+}
+
+.tab-button:hover:not(.active) {
+    color: var(--gray-100);
+    border-bottom-color: var(--gray-600);
+}
+
+.tab-button.active {
+    color: var(--primary);
+    border-bottom: 2px solid var(--primary);
+}
+
+/* Card Components */
 .card {
-    background-color: #1f2937;
-    border-radius: 0.75rem;
+    background-color: var(--gray-800);
+    border-radius: 0.75rem; /* rounded-lg */
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    border: 1px solid #374151;
-    transition: transform 0.2s, box-shadow 0.2s;
+    border: 1px solid var(--gray-700);
+    transition: transform 0.2s ease-out, box-shadow 0.2s ease-out;
+    padding: 1.5rem; /* p-6 */
 }
 
 .card:hover {
@@ -31,172 +110,240 @@ body {
     box-shadow: 0 10px 15px rgba(0, 0, 0, 0.2);
 }
 
-.status-badge {
-    display: inline-block;
-    padding: 0.35rem 0.75rem;
-    border-radius: 9999px;
-    font-size: 0.875rem;
+h2 {
+    font-size: 1.25rem; /* text-xl */
+    font-weight: 600; /* font-semibold */
+    margin-bottom: 1rem; /* mb-4 */
+    color: var(--gray-100);
+}
+
+/* Form Elements */
+label {
+    display: block;
+    font-size: 0.875rem; /* text-sm */
     font-weight: 500;
-    text-transform: uppercase;
+    color: var(--gray-400);
+    margin-bottom: 0.25rem; /* mb-1 */
 }
 
-.status-armed, .status-active, .status-locked, .status-detected {
-    background-color: rgba(239, 68, 68, 0.1);
-    color: var(--danger);
-    border: 1px solid var(--danger);
+input[type="email"],
+input[type="password"],
+input[type="text"] {
+    width: 100%;
+    padding: 0.75rem; /* Increased from p-2 for better usability */
+    background-color: var(--gray-700);
+    border-radius: 0.25rem; /* rounded */
+    border: 1px solid var(--gray-600);
+    color: var(--gray-100);
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
 }
 
-.status-disarmed, .status-inactive, .status-cleared {
-    background-color: rgba(16, 185, 129, 0.1);
-    color: var(--success);
-    border: 1px solid var(--success);
+input[type="email"]:focus,
+input[type="password"]:focus,
+input[type="text"]:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.5); /* Focus ring effect */
 }
 
-.status-warning {
-    background-color: rgba(245, 158, 11, 0.1);
-    color: var(--warning);
-    border: 1px solid var(--warning);
-}
-
+/* Buttons */
 .btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    padding: 0.625rem 1.25rem;
-    border-radius: 0.5rem;
+    padding: 0.625rem 1.25rem; /* py-2 px-4 */
+    border-radius: 0.5rem; /* rounded */
     font-weight: 500;
     cursor: pointer;
     transition: all 0.2s ease;
     border: none;
     outline: none;
-    gap: 0.5rem;
+    gap: 0.5rem; /* Space between text and icon */
+    white-space: nowrap; /* Prevent button text from wrapping */
 }
 
 .btn-primary {
     background-color: var(--primary);
-    color: white;
+    color: var(--white);
 }
-
 .btn-primary:hover:not(:disabled) {
     background-color: var(--primary-dark);
 }
 
 .btn-danger {
     background-color: var(--danger);
-    color: white;
+    color: var(--white);
 }
-
 .btn-danger:hover:not(:disabled) {
     background-color: var(--danger-dark);
 }
 
 .btn-success {
     background-color: var(--success);
-    color: white;
+    color: var(--white);
 }
-
 .btn-success:hover:not(:disabled) {
     background-color: var(--success-dark);
 }
 
 .btn-warning {
     background-color: var(--warning);
-    color: white;
+    color: var(--white);
 }
-
 .btn-warning:hover:not(:disabled) {
     background-color: var(--warning-dark);
 }
 
 .btn-secondary {
-    background-color: #374151;
-    color: #f3f4f6;
+    background-color: var(--gray-600);
+    color: var(--gray-100);
 }
-
 .btn-secondary:hover:not(:disabled) {
-    background-color: #4b5563;
+    background-color: var(--gray-700);
 }
 
 .btn:disabled {
-    opacity: 0.5;
+    opacity: 0.6;
     cursor: not-allowed;
 }
 
-.activity-log {
-    max-height: 300px;
-    overflow-y: auto;
-    padding-right: 0.5rem;
+.btn-sm {
+    padding: 0.4rem 0.8rem; /* py-1 px-2 */
+    font-size: 0.875rem; /* text-sm */
+    border-radius: 0.375rem; /* rounded-md */
 }
 
+/* Status Badges (Dashboard and Device List) */
+.status-badge {
+    display: inline-block;
+    padding: 0.35rem 0.75rem;
+    border-radius: 9999px; /* pill shape */
+    font-size: 0.875rem; /* text-sm */
+    font-weight: 500;
+    text-transform: uppercase;
+    text-align: center;
+    min-width: 6rem; /* Ensure consistent width for all badges */
+}
+
+.status-armed, .status-active, .status-locked, .status-detected {
+    background-color: rgba(239, 68, 68, 0.1); /* Red with slight transparency */
+    color: var(--danger-light); /* Lighter red for text contrast */
+    border: 1px solid var(--danger);
+}
+
+.status-disarmed, .status-inactive, .status-cleared {
+    background-color: rgba(16, 185, 129, 0.1); /* Green with slight transparency */
+    color: var(--success-light); /* Lighter green */
+    border: 1px solid var(--success);
+}
+
+.status-unlocked {
+    background-color: rgba(59, 130, 246, 0.1); /* Blue with slight transparency */
+    color: var(--primary-light);
+    border: 1px solid var(--primary);
+}
+
+.status-warning {
+    background-color: rgba(245, 158, 11, 0.1); /* Amber with slight transparency */
+    color: var(--warning-light);
+    border: 1px solid var(--warning);
+}
+
+/* Activity Log (Dashboard) */
+.activity-log {
+    max-height: 300px; /* Fixed height to enable scrolling */
+    overflow-y: auto;
+    padding-right: 0.5rem; /* Space for scrollbar to avoid content overlap */
+}
+
+/* Custom Scrollbar Styling for Webkit Browsers */
 .activity-log::-webkit-scrollbar {
     width: 6px;
 }
 
 .activity-log::-webkit-scrollbar-track {
-    background: #1f2937;
+    background: var(--gray-800);
     border-radius: 10px;
 }
 
 .activity-log::-webkit-scrollbar-thumb {
-    background: #4b5563;
+    background: var(--gray-600);
     border-radius: 10px;
 }
 
 .activity-log::-webkit-scrollbar-thumb:hover {
-    background: #6b7280;
+    background: var(--gray-500);
 }
 
 .log-entry {
     display: flex;
     align-items: center;
-    padding: 0.5rem 0;
-    border-bottom: 1px solid #374151;
+    padding: 0.5rem 0.75rem; /* py-2 px-3 */
+    border-bottom: 1px solid var(--gray-700);
+    transition: background-color 0.1s ease-in-out;
+}
+
+.log-entry:last-child {
+    border-bottom: none; /* No border for the last log entry */
+}
+
+.log-entry:hover {
+    background-color: var(--gray-700);
 }
 
 .log-time {
     font-size: 0.75rem;
-    color: #9ca3af;
-    min-width: 60px;
+    color: var(--gray-400);
+    min-width: 60px; /* Ensures consistent alignment */
+    flex-shrink: 0; /* Prevents shrinking on smaller screens */
 }
 
 .log-icon {
-    margin: 0 0.75rem;
+    margin: 0 0.75rem; /* mx-3 */
     font-size: 1rem;
+    flex-shrink: 0;
 }
 
 .log-message {
-    flex-grow: 1;
+    flex-grow: 1; /* Takes up remaining space */
     font-size: 0.875rem;
 }
 
-.log-critical {
-    color: var(--danger);
-}
+/* Log Type Colors (for icons and messages) */
+.log-info .log-icon, .log-info .log-message { color: var(--info-light); }
+.log-success .log-icon, .log-success .log-message { color: var(--success-light); }
+.log-warning .log-icon, .log-warning .log-message { color: var(--warning-light); }
+.log-danger .log-icon, .log-danger .log-message, .log-critical .log-icon, .log-critical .log-message { color: var(--danger-light); }
+.log-alert .log-icon, .log-alert .log-message { color: var(--warning-light); }
 
-.log-warning {
-    color: var(--warning);
-}
-
-.log-info {
-    color: var(--info);
-}
-
-.log-success {
-    color: var(--success);
+/* Toast Notifications */
+#toastContainer {
+    position: fixed;
+    bottom: 1rem; /* bottom-4 */
+    right: 1rem; /* right-4 */
+    z-index: 1000; /* Ensure toasts are on top */
+    display: flex;
+    flex-direction: column-reverse; /* New toasts appear above older ones */
+    gap: 0.5rem; /* space-y-2 */
+    pointer-events: none; /* Allows clicks to pass through if no toast is present */
 }
 
 .toast {
-    position: fixed;
-    bottom: 1rem;
-    right: 1rem;
+    position: relative;
     padding: 1rem 1.5rem;
     border-radius: 0.5rem;
-    color: white;
-    font-weight: bold;
+    color: var(--white);
+    font-weight: 500;
     opacity: 0;
     transform: translateY(20px);
-    transition: opacity 0.3s, transform 0.3s;
-    z-index: 1000;
+    transition: opacity 0.3s ease-out, transform 0.3s ease-out;
+    min-width: 200px;
+    max-width: 300px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    pointer-events: auto; /* Re-enable pointer events for the toast itself */
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
 }
 
 .toast.show {
@@ -204,31 +351,73 @@ body {
     transform: translateY(0);
 }
 
-.toast-success {
-    background-color: var(--success);
+.toast-success { background-color: var(--success); }
+.toast-error { background-color: var(--danger); }
+.toast-warning { background-color: var(--warning); }
+.toast-info { background-color: var(--info); }
+
+/* Notifications Bell Icon and Badge */
+#notificationsButton {
+    background-color: var(--gray-800);
+    color: var(--gray-300);
+    position: relative;
+    padding: 0.75rem; /* Increased padding for better click area */
+    border-radius: 9999px; /* rounded-full */
+    transition: background-color 0.2s ease;
 }
 
-.toast-error {
+#notificationsButton:hover {
+    background-color: var(--gray-700);
+}
+
+.notification-badge {
+    position: absolute;
+    top: -0.25rem; /* Adjusted for better visual alignment */
+    right: -0.25rem;
     background-color: var(--danger);
+    color: var(--white);
+    border-radius: 9999px; /* Full circle */
+    width: 1.25rem; /* Consistent size for the badge */
+    height: 1.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1; /* Ensures single digit numbers are centered */
+    box-shadow: 0 0 0 2px var(--gray-900); /* Adds a small border for separation from background */
 }
 
-.toast-warning {
-    background-color: var(--warning);
+/* User Info Display */
+.flex.items-center.gap-2 > div { /* Targets the user icon circle */
+    background-color: var(--primary); /* Consistent with primary color */
+    width: 2rem; /* w-8 */
+    height: 2rem; /* h-8 */
+    border-radius: 9999px; /* rounded-full */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--white);
 }
 
-.toast-info {
-    background-color: var(--info);
+#userEmail {
+    font-weight: 500; /* font-medium */
+    color: var(--gray-100);
 }
 
+/* Loading Spinner */
 .spinner {
-    border: 2px solid rgba(255, 255, 255, 0.3);
-    border-top: 2px solid var(--primary);
+    border: 2px solid rgba(255, 255, 255, 0.3); /* Lighter gray for spinner track */
+    border-top: 2px solid var(--primary); /* Primary color for spinner animation */
     border-radius: 50%;
     width: 1.5rem;
     height: 1.5rem;
     animation: spin 1s linear infinite;
+    margin: 0 auto; /* Center the spinner */
+    display: block; /* Ensure it's a block element for margin auto to work */
+}
+.spinner.hidden {
     display: none;
-    margin: 0 auto;
 }
 
 @keyframes spin {
@@ -236,26 +425,33 @@ body {
     100% { transform: rotate(360deg); }
 }
 
+/* Proximity Sensor Distance Indicator (Dashboard) */
 .distance-indicator {
-    height: 10px;
+    height: 10px; /* Slightly taller than original h-2 for better visibility */
     border-radius: 5px;
     background: linear-gradient(to right, var(--success), var(--warning), var(--danger));
     position: relative;
+    overflow: hidden; /* Ensures the marker stays within the bounds */
 }
 
 .distance-marker {
     position: absolute;
-    width: 2px;
-    height: 15px;
-    background-color: white;
-    top: -2.5px;
-    left: 0%;
-    transition: left 0.2s;
+    width: 4px; /* Wider marker for better visibility */
+    height: 100%; /* Matches indicator height */
+    background-color: var(--white); /* White marker for strong contrast */
+    top: 0;
+    left: 0%; /* Initial position */
+    transition: left 0.3s ease-out; /* Smooth movement when distance changes */
+    box-shadow: 0 0 5px rgba(0, 0, 0, 0.5); /* Subtle shadow for depth */
 }
 
+/* Alerts Section (Dashboard) */
 .alert-card {
     border-left: 4px solid var(--danger);
-    animation: pulse 2s infinite;
+    animation: pulse 2s infinite; /* Pulsing animation for active alerts */
+    background-color: var(--gray-800); /* Ensure background is set */
+    padding: 1.5rem;
+    border-radius: 0.75rem;
 }
 
 @keyframes pulse {
@@ -270,34 +466,109 @@ body {
     }
 }
 
-.tab-button {
-    padding: 0.75rem 1.5rem;
-    border: none;
-    background: none;
-    cursor: pointer;
-    font-weight: 500;
-    color: #9ca3af;
-    border-bottom: 2px solid transparent;
-    transition: all 0.2s ease;
-}
-
-.tab-button.active {
-    color: var(--primary);
-    border-bottom: 2px solid var(--primary);
-}
-
-.notification-badge {
-    position: absolute;
-    top: -0.5rem;
-    right: -0.5rem;
-    background-color: var(--danger);
-    color: white;
-    border-radius: 9999px;
-    width: 1.25rem;
-    height: 1.25rem;
-    display: flex;
+/* Analytics Chart Container */
+#analytics #chartContainer {
+    min-height: 250px; /* Ensures the chart area has a defined height */
+    display: flex; /* Centers "Loading analytics..." text vertically and horizontally */
     align-items: center;
     justify-content: center;
-    font-size: 0.75rem;
-    font-weight: 600;
 }
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+    header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+    }
+    header .flex.items-center.gap-4 {
+        width: 100%;
+        justify-content: space-between;
+    }
+    h1 {
+        font-size: 2rem;
+    }
+    .card .p-6 { /* Reduce padding on smaller screens */
+        padding: 1rem;
+    }
+    .btn { /* Make buttons full width on small screens */
+        width: 100%;
+    }
+    /* Adjust grid for security section on dashboard */
+    .grid.grid-cols-1.md\:grid-cols-2 {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Utility classes */
+.text-center { text-align: center; }
+.py-4 { padding-top: 1rem; padding-bottom: 1rem; }
+.text-gray-500 { color: var(--gray-500); }
+.text-gray-400 { color: var(--gray-400); }
+.text-lg { font-size: 1.125rem; }
+.font-medium { font-weight: 500; }
+.text-sm { font-size: 0.875rem; }
+.space-y-4 > *:not([hidden]) ~ *:not([hidden]) { margin-top: 1rem; }
+.space-y-3 > *:not([hidden]) ~ *:not([hidden]) { margin-top: 0.75rem; }
+.space-y-2 > *:not([hidden]) ~ *:not([hidden]) { margin-top: 0.5rem; }
+.mt-4 { margin-top: 1rem; }
+.mb-2 { margin-bottom: 0.5rem; }
+.mb-4 { margin-bottom: 1rem; }
+.mr-2 { margin-right: 0.5rem; }
+.mr-1 { margin-right: 0.25rem; }
+.relative { position: relative; }
+.flex { display: flex; }
+.items-center { align-items: center; }
+.justify-center { justify-content: center; }
+.justify-between { justify-content: space-between; }
+.gap-4 { gap: 1rem; }
+.gap-2 { gap: 0.5rem; }
+.w-8 { width: 2rem; }
+.h-8 { height: 2rem; }
+.w-full { width: 100%; }
+.rounded-full { border-radius: 9999px; }
+.bg-indigo-500 { background-color: var(--primary); } /* Map to primary color for consistency */
+.text-white { color: var(--white); }
+.hover\:bg-gray-700:hover { background-color: var(--gray-700); }
+.hidden { display: none !important; } /* Important to override other displays */
+.fixed { position: fixed; }
+.bottom-4 { bottom: 1rem; }
+.right-4 { right: 1rem; }
+.bg-green-600 { background-color: var(--success); }
+.hover\:bg-green-700:hover { background-color: var(--success-dark); }
+.text-blue-400 { color: var(--primary-light); }
+.hover\:underline:hover { text-decoration: underline; }
+.h-64 { height: 16rem; }
+.grid-cols-1 { grid-template-columns: repeat(1, minmax(0, 1fr)); }
+.lg\:grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.lg\:col-span-2 { grid-column: span 2 / span 2; }
+.col-span-1 { grid-column: span 1 / span 1; }
+.grid { display: grid; }
+.gap-6 { gap: 1.5rem; }
+.grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.text-3xl { font-size: 1.875rem; } /* For distance value */
+.font-bold { font-weight: 700; }
+.flex-col { flex-direction: column; }
+.items-start { align-items: flex-start; }
+.text-red-600 { color: var(--danger); }
+.hover\:bg-red-700:hover { background-color: var(--danger-dark); }
+.bg-yellow-600 { background-color: var(--warning); }
+.hover\:bg-yellow-700:hover { background-color: var(--warning-dark); }
+.bg-blue-600 { background-color: var(--primary); }
+.hover\:bg-blue-700:hover { background-color: var(--primary-dark); }
+.text-xs { font-size: 0.75rem; }
+.h-2 { height: 0.5rem; } /* For distance indicator */
+.w-2 { width: 0.5rem; } /* For distance marker */
+.bg-blue-500 { background-color: var(--primary); }
+.rounded { border-radius: 0.25rem; }
+.bg-gray-600 { background-color: var(--gray-600); }
+.bg-gray-700 { background-color: var(--gray-700); }
+.bg-gray-900 { background-color: var(--gray-900); } /* Used in body, but defined for completeness */
+.p-2 { padding: 0.5rem; }
+.p-6 { padding: 1.5rem; }
+.max-w-md { max-width: 28rem; } /* max-width: 448px; */
+.flex-grow { flex-grow: 1; }
+.min-h-screen { min-height: 100vh; }
+.border-b { border-bottom-width: 1px; }
+.border-gray-700 { border-color: var(--gray-700); }
+.shadow { box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06); } /* Default shadow */

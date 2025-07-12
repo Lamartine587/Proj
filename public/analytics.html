@@ -6,10 +6,10 @@
     <title>Smart Home Security - Analytics</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/mqtt@5.0.5/dist/mqtt.min.js"></script>
     <link rel="stylesheet" href="/styles.css">
 </head>
-<body class="min-h-screen">
+<body class="min-h-screen bg-gray-900 text-gray-100">
     <script>
         if (!localStorage.getItem('token')) {
             window.location.href = '/login.html';
@@ -17,200 +17,176 @@
     </script>
     <div class="container mx-auto px-4 py-8 max-w-7xl">
         <header class="flex justify-between items-center mb-8">
-            <h1 class="text-3xl font-bold text-white">Smart Home Security Dashboard</h1>
+            <h1 class="text-3xl font-bold text-white">Smart Home Security - Analytics</h1>
             <div class="flex items-center gap-4">
                 <div class="relative">
-                    <button id="notificationsButton" class="p-2 rounded-full hover:bg-gray-700 relative">
-                        <i class="fas fa-bell text-gray-300"></i>
-                        <span id="notificationCount" class="notification-badge hidden">0</span>
+                    <button id="notificationsButton" class="p-2 rounded-full hover:bg-gray-700 relative" aria-label="View Notifications">
+                        <i class="fas fa-bell text-gray-300" aria-hidden="true"></i>
+                        <span id="notificationCount" class="notification-badge hidden" aria-live="polite" aria-atomic="true">0</span>
                     </button>
                 </div>
                 <div class="flex items-center gap-2">
                     <div class="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center text-white">
-                        <i class="fas fa-user"></i>
+                        <i class="fas fa-user" aria-hidden="true"></i>
                     </div>
                     <span id="userEmail" class="font-medium">Loading...</span>
                 </div>
-                <button id="logoutBtn" class="btn btn-secondary"><i class="fas fa-sign-out-alt mr-2"></i> Logout</button>
+                <button id="logoutBtn" class="btn btn-secondary" aria-label="Logout"><i class="fas fa-sign-out-alt mr-2" aria-hidden="true"></i> Logout</button>
             </div>
         </header>
 
-        <nav class="flex border-b border-gray-700 mb-6">
+        <nav class="flex border-b border-gray-700 mb-6" aria-label="Main Navigation">
             <a href="/dashboard.html" class="tab-button">Dashboard</a>
             <a href="/devices.html" class="tab-button">Devices</a>
-            <a href="/analytics.html" class="tab-button active">Analytics</a>
+            <a href="/analytics.html" class="tab-button active" aria-current="page">Analytics</a>
             <a href="/settings.html" class="tab-button">Settings</a>
         </nav>
 
-        <div id="analytics">
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-                <div class="card">
-                    <div class="p-6">
-                        <h2 class="text-xl font-semibold mb-4">Security Events</h2>
-                        <canvas id="securityEventsChart" height="300"></canvas>
-                    </div>
-                </div>
-                <div class="card">
-                    <div class="p-6">
-                        <h2 class="text-xl font-semibold mb-4">Device Activity</h2>
-                        <canvas id="deviceActivityChart" height="300"></canvas>
-                    </div>
-                </div>
-            </div>
-            <div class="card">
+        <main id="analytics"> <section class="card bg-gray-800 rounded-lg shadow" aria-labelledby="security-analytics-heading">
                 <div class="p-6">
-                    <h2 class="text-xl font-semibold mb-4">Motion Detection History</h2>
-                    <canvas id="motionHistoryChart" height="150"></canvas>
+                    <h2 id="security-analytics-heading" class="text-xl font-semibold mb-4">Security Analytics</h2>
+                    <div id="chartContainer" class="h-64" role="img" aria-label="Security activity chart showing log events over time">
+                        <div class="text-center text-gray-500 py-4">Loading analytics...</div>
+                    </div>
+                    <div id="loadingSpinner" class="spinner mt-4 hidden" role="status" aria-label="Loading analytics data"></div>
                 </div>
-            </div>
-        </div>
-
-        <div id="toastContainer"></div>
+            </section>
+        </main> <div id="toastContainer" class="fixed bottom-4 right-4 space-y-2" role="status" aria-live="polite"></div>
     </div>
 
+    <script src="/common.js"></script>
     <script>
-        const BACKEND_URL = 'http://localhost:3000';
-        let securityEventsChart, deviceActivityChart, motionHistoryChart;
-        const notificationsButton = document.getElementById('notificationsButton');
-        const notificationCount = document.getElementById('notificationCount');
-        const toastContainer = document.getElementById('toastContainer');
-        const userEmailEl = document.getElementById('userEmail');
-        const logoutBtn = document.getElementById('logoutBtn');
-
+        let systemStatus = { armed: false, lock: 'LOCKED', motion: 'CLEARED', distance: 0, alarm: 'INACTIVE' }; // Retained for common.js functions
         let unreadNotifications = 0;
+        let lastLogMessage = null; // Retained for common.js functions
+        let pollingInterval;
+        let mqttClient;
+        let activityChart = null; // Reference to the Chart.js instance
 
         async function initAnalytics() {
+            await fetchConfig();
             await fetchUser();
             setupEventListeners();
-            initCharts();
-        }
-
-        async function fetchUser() {
-            try {
-                const response = await fetch(`${BACKEND_URL}/api/auth/me`, {
-                    headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-                });
-                const data = await response.json();
-                if (!response.ok) throw new Error(data.message || 'Failed to fetch user');
-                userEmailEl.textContent = data.email;
-            } catch (error) {
-                console.error('Error fetching user:', error);
-                showToast('Failed to load user data', 'error');
-                localStorage.removeItem('token');
-                window.location.href = '/login.html';
-            }
+            mqttClient = connectMqtt();
+            fetchAnalytics();
+            startPolling();
         }
 
         function setupEventListeners() {
-            notificationsButton.addEventListener('click', showNotifications);
-            logoutBtn.addEventListener('click', () => {
+            document.getElementById('notificationsButton').addEventListener('click', showNotifications);
+            document.getElementById('logoutBtn').addEventListener('click', () => {
                 localStorage.removeItem('token');
+                if (mqttClient) mqttClient.end();
                 window.location.href = '/login.html';
             });
         }
 
-        function initCharts() {
-            const ctxSecurityEvents = document.getElementById('securityEventsChart').getContext('2d');
-            securityEventsChart = new Chart(ctxSecurityEvents, {
-                type: 'line',
-                data: {
-                    labels: ['0', '1', '2', '3', '4', '5'],
-                    datasets: [{
-                        label: 'Security Events',
-                        data: [12, 19, 3, 5, 2, 3],
-                        backgroundColor: 'rgba(75, 192, 192, 0.2)',
-                        borderColor: 'rgba(75, 192, 192, 1)',
-                        borderWidth: 1
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    scales: {
-                        y: { beginAtZero: true, ticks: { color: '#9CA3AF' } },
-                        x: { ticks: { color: '#9CA3AF' } }
-                    },
-                    plugins: {
-                        legend: { labels: { color: '#9CA3AF' } },
-                        tooltip: {
-                            backgroundColor: '#1F2937',
-                            titleColor: '#F3F4F6',
-                            bodyColor: '#D1D5DB',
-                            borderColor: '#374151',
-                            borderWidth: 1
-                        }
-                    }
-                }
-            });
+        function startPolling() {
+            if (pollingInterval) clearInterval(pollingInterval);
+            pollingInterval = setInterval(fetchAnalytics, POLL_INTERVAL);
+        }
 
-            const ctxDeviceActivity = document.getElementById('deviceActivityChart').getContext('2d');
-            deviceActivityChart = new Chart(ctxDeviceActivity, {
+        async function fetchAnalytics() {
+            try {
+                toggleLoading(true);
+                const response = await fetch(`${BACKEND_URL}/api/logs`, {
+                    headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+                });
+                if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
+                const logs = await response.json();
+                updateAnalytics(logs);
+            } catch (error) {
+                console.error('Error fetching analytics:', error);
+                showToast('Failed to load analytics. Please check server connectivity.', 'error');
+            } finally {
+                toggleLoading(false);
+            }
+        }
+
+        function updateAnalytics(logs) {
+            const chartContainer = document.getElementById('chartContainer');
+            if (!logs || logs.length === 0) {
+                chartContainer.innerHTML = '<div class="text-center text-gray-500 py-4">No data available.</div>';
+                // Destroy existing chart if no data
+                if (activityChart) {
+                    activityChart.destroy();
+                    activityChart = null;
+                }
+                return;
+            }
+            chartContainer.innerHTML = `
+                <canvas id="activityChart"></canvas>
+            `;
+
+            // Destroy previous chart instance if it exists before creating a new one
+            if (activityChart) {
+                activityChart.destroy();
+            }
+
+            const ctx = document.getElementById('activityChart').getContext('2d');
+            activityChart = new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: ['Device 1', 'Device 2', 'Device 3', 'Device 4'],
+                    // Using full timestamp as label might be too long. Consider formatting for display.
+                    // For accessibility, ensure data can be conveyed textually if chart isn't sufficient.
+                    labels: logs.map(log => new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })),
                     datasets: [{
-                        label: 'Activity',
-                        data: [65, 59, 80, 81],
-                        backgroundColor: [
-                            'rgba(255, 99, 132, 0.2)',
-                            'rgba(54, 162, 235, 0.2)',
-                            'rgba(255, 206, 86, 0.2)',
-                            'rgba(75, 192, 192, 0.2)'
-                        ],
-                        borderColor: [
-                            'rgba(255, 99, 132, 1)',
-                            'rgba(54, 162, 235, 1)',
-                            'rgba(255, 206, 86, 1)',
-                            'rgba(75, 192, 192, 1)'
-                        ],
+                        label: 'Activity Count',
+                        data: logs.map(() => 1), // Assuming each log entry is 1 activity count
+                        backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                        borderColor: 'rgba(54, 162, 235, 1)',
                         borderWidth: 1
                     }]
                 },
                 options: {
                     responsive: true,
+                    maintainAspectRatio: false,
                     scales: {
-                        y: { beginAtZero: true, ticks: { color: '#9CA3AF' } },
-                        x: { ticks: { color: '#9CA3AF' } }
-                    },
-                    plugins: {
-                        legend: { labels: { color: '#9CA3AF' } },
-                        tooltip: {
-                            backgroundColor: '#1F2937',
-                            titleColor: '#F3F4F6',
-                            bodyColor: '#D1D5DB',
-                            borderColor: '#374151',
-                            borderWidth: 1
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Number of Events',
+                                color: 'var(--gray-300)'
+                            },
+                            ticks: {
+                                color: 'var(--gray-400)'
+                            },
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.1)'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Time',
+                                color: 'var(--gray-300)'
+                            },
+                            ticks: {
+                                color: 'var(--gray-400)'
+                            },
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.1)'
+                            }
                         }
-                    }
-                }
-            });
-
-            const ctxMotionHistory = document.getElementById('motionHistoryChart').getContext('2d');
-            motionHistoryChart = new Chart(ctxMotionHistory, {
-                type: 'line',
-                data: {
-                    labels: ['0', '1', '2', '3', '4', '5'],
-                    datasets: [{
-                        label: 'Motion Detected',
-                        data: [12, 19, 3, 5, 2, 3],
-                        backgroundColor: 'rgba(153, 102, 255, 0.2)',
-                        borderColor: 'rgba(153, 102, 255, 1)',
-                        borderWidth: 1
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    scales: {
-                        y: { beginAtZero: true, ticks: { color: '#9CA3AF' } },
-                        x: { ticks: { color: '#9CA3AF' } }
                     },
                     plugins: {
-                        legend: { labels: { color: '#9CA3AF' } },
+                        legend: {
+                            labels: {
+                                color: 'var(--gray-100)'
+                            }
+                        },
                         tooltip: {
-                            backgroundColor: '#1F2937',
-                            titleColor: '#F3F4F6',
-                            bodyColor: '#D1D5DB',
-                            borderColor: '#374151',
-                            borderWidth: 1
+                            callbacks: {
+                                label: function(context) {
+                                    return `${context.dataset.label}: ${context.raw}`;
+                                },
+                                title: function(context) {
+                                    // Make tooltip title more descriptive
+                                    const logEntry = logs[context[0].dataIndex];
+                                    return `Time: ${new Date(logEntry.timestamp).toLocaleString()}\nEvent: ${logEntry.message}`;
+                                }
+                            }
                         }
                     }
                 }
@@ -218,56 +194,52 @@
         }
 
         function showNotifications() {
+            const notificationsButton = document.getElementById('notificationsButton');
+            const notificationCount = document.getElementById('notificationCount');
             if (unreadNotifications === 0) {
                 showToast('No new notifications', 'info');
                 return;
             }
             const notificationList = document.createElement('div');
-            notificationList.className = 'notification-list';
+            notificationList.className = 'notification-list bg-gray-700 p-4 rounded shadow';
+            const ul = document.createElement('ul');
+            ul.setAttribute('role', 'list');
             for (let i = 0; i < unreadNotifications; i++) {
-                const notificationItem = document.createElement('div');
-                notificationItem.className = 'notification-item';
-                notificationItem.textContent = `Notification ${i + 1}`;
-                notificationList.appendChild(notificationItem);
+                const li = document.createElement('li');
+                li.className = 'notification-item text-gray-200 py-1';
+                li.textContent = `New Event ${i + 1} requiring attention.`;
+                ul.appendChild(li);
             }
+            notificationList.appendChild(ul);
             showToast(notificationList, 'info', true);
             unreadNotifications = 0;
-            updateNotificationCount();
-        }
-
-        function updateNotificationCount() {
-            notificationCount.textContent = unreadNotifications > 0 ? unreadNotifications : '';
-            notificationsButton.classList.toggle('has-notifications', unreadNotifications > 0);
+            notificationCount.textContent = '';
+            notificationCount.classList.add('hidden');
+            notificationsButton.classList.remove('has-notifications');
+            notificationsButton.setAttribute('aria-label', 'View Notifications. No unread notifications.');
         }
 
         function incrementNotificationCount() {
             unreadNotifications++;
-            updateNotificationCount();
+            const notificationCount = document.getElementById('notificationCount');
+            notificationCount.textContent = unreadNotifications;
+            notificationCount.classList.remove('hidden');
+            document.getElementById('notificationsButton').classList.add('has-notifications');
+            document.getElementById('notificationsButton').setAttribute('aria-label', `View Notifications. ${unreadNotifications} unread notifications.`);
         }
-
-        function showToast(message, type = 'info', persistent = false) {
-            const toast = document.createElement('div');
-            toast.className = `toast toast-${type}`;
-            toast.innerHTML = `
-                <div class="toast-content">${message}</div>
-                <button class="toast-close" onclick="this.parentElement.remove()">×</button>
-            `;
-            if (!persistent) {
-                setTimeout(() => {
-                    toast.remove();
-                }, 5000);
-            }
-            toastContainer.appendChild(toast);
-            if (type === 'error') {
-                console.error('Toast Error:', message);
-            } else if (type === 'success') {
-                console.log('Toast Success:', message);
-            } else {
-                console.log('Toast Info:', message);
-            }
+        async function initAnalytics() {
+            await fetchConfig();
+            await fetchUser();
+            setupEventListeners();
+            mqttClient = connectMqtt();
+            fetchAnalytics();
+            startPolling();
+            speak('You are now on the Analytics page.'); // NEW
+            playBeep(1);
         }
-
         document.addEventListener('DOMContentLoaded', initAnalytics);
+        
     </script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </body>
 </html>

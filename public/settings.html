@@ -6,9 +6,10 @@
     <title>Smart Home Security - Settings</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/mqtt@5.0.5/dist/mqtt.min.js"></script>
     <link rel="stylesheet" href="/styles.css">
 </head>
-<body class="min-h-screen">
+<body class="min-h-screen bg-gray-900 text-gray-100">
     <script>
         if (!localStorage.getItem('token')) {
             window.location.href = '/login.html';
@@ -16,243 +17,164 @@
     </script>
     <div class="container mx-auto px-4 py-8 max-w-7xl">
         <header class="flex justify-between items-center mb-8">
-            <h1 class="text-3xl font-bold text-white">Smart Home Security Dashboard</h1>
+            <h1 class="text-3xl font-bold text-white">Smart Home Security - Settings</h1>
             <div class="flex items-center gap-4">
                 <div class="relative">
-                    <button id="notificationsButton" class="p-2 rounded-full hover:bg-gray-700 relative">
-                        <i class="fas fa-bell text-gray-300"></i>
-                        <span id="notificationCount" class="notification-badge hidden">0</span>
+                    <button id="notificationsButton" class="p-2 rounded-full hover:bg-gray-700 relative" aria-label="View Notifications">
+                        <i class="fas fa-bell text-gray-300" aria-hidden="true"></i>
+                        <span id="notificationCount" class="notification-badge hidden" aria-live="polite" aria-atomic="true">0</span>
                     </button>
                 </div>
                 <div class="flex items-center gap-2">
                     <div class="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center text-white">
-                        <i class="fas fa-user"></i>
+                        <i class="fas fa-user" aria-hidden="true"></i>
                     </div>
                     <span id="userEmail" class="font-medium">Loading...</span>
                 </div>
-                <button id="logoutBtn" class="btn btn-secondary"><i class="fas fa-sign-out-alt mr-2"></i> Logout</button>
+                <button id="logoutBtn" class="btn btn-secondary" aria-label="Logout"><i class="fas fa-sign-out-alt mr-2" aria-hidden="true"></i> Logout</button>
             </div>
         </header>
 
-        <nav class="flex border-b border-gray-700 mb-6">
+       <nav class="flex border-b border-gray-700 mb-6" aria-label="Main Navigation">
             <a href="/dashboard.html" class="tab-button">Dashboard</a>
             <a href="/devices.html" class="tab-button">Devices</a>
             <a href="/analytics.html" class="tab-button">Analytics</a>
-            <a href="/settings.html" class="tab-button active">Settings</a>
+            <a href="/settings.html" class="tab-button active" aria-current="page">Settings</a>
         </nav>
 
-        <div id="settings">
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div class="card lg:col-span-2">
-                    <div class="p-6">
-                        <h2 class="text-xl font-semibold mb-4">System Settings</h2>
-                        <form id="settingsForm" class="space-y-6">
-                            <div>
-                                <label for="systemName" class="block text-sm font-medium text-gray-400 mb-1">System Name</label>
-                                <input type="text" id="systemName" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-white" value="Smart Home Security">
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-400 mb-1">Security Mode</label>
-                                <div class="space-y-2">
-                                    <div class="flex items-center">
-                                        <input id="mode-home" name="security-mode" type="radio" class="focus:ring-indigo-500 h-4 w-4 text-indigo-600 border-gray-600 bg-gray-700" checked>
-                                        <label for="mode-home" class="ml-3 block text-sm text-gray-300">Home (Only monitor entry points)</label>
-                                    </div>
-                                    <div class="flex items-center">
-                                        <input id="mode-away" name="security-mode" type="radio" class="focus:ring-indigo-500 h-4 w-4 text-indigo-600 border-gray-600 bg-gray-700">
-                                        <label for="mode-away" class="ml-3 block text-sm text-gray-300">Away (Monitor all areas)</label>
-                                    </div>
-                                    <div class="flex items-center">
-                                        <input id="mode-night" name="security-mode" type="radio" class="focus:ring-indigo-500 h-4 w-4 text-indigo-600 border-gray-600 bg-gray-700">
-                                        <label for="mode-night" class="ml-3 block text-sm text-gray-300">Night (Strict monitoring with alarms)</label>
-                                    </div>
-                                </div>
-                            </div>
-                            <div>
-                                <label for="alarmDuration" class="block text-sm font-medium text-gray-400 mb-1">Alarm Duration (seconds)</label>
-                                <input type="number" id="alarmDuration" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-white" value="30" min="10" max="300">
-                            </div>
-                            <div>
-                                <label for="alarmSound" class="block text-sm font-medium text-gray-400 mb-1">Alarm Sound</label>
-                                <select id="alarmSound" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-white">
-                                    <option>Standard Alarm</option>
-                                    <option>Police Siren</option>
-                                    <option>High Pitch</option>
-                                    <option>Pulsing Alarm</option>
-                                </select>
-                            </div>
-                            <div class="flex items-center">
-                                <input id="enableNotifications" type="checkbox" class="focus:ring-indigo-500 h-4 w-4 text-indigo-600 border-gray-600 bg-gray-700 rounded" checked>
-                                <label for="enableNotifications" class="ml-3 block text-sm text-gray-300">Enable Push Notifications</label>
-                            </div>
-                            <div>
-                                <button type="submit" class="btn btn-primary">
-                                    <i class="fas fa-save mr-2"></i> Save Settings
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-                <div class="card">
-                    <div class="p-6">
-                        <h2 class="text-xl font-semibold mb-4">User Account</h2>
-                        <div class="space-y-4">
-                            <div>
-                                <h3 class="text-sm font-medium text-gray-400 mb-2">Your Account</h3>
-                                <div id="userAccount" class="flex items-center justify-between p-2 bg-gray-700 rounded">
-                                    <div class="flex items-center">
-                                        <div class="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center text-white">
-                                            <i class="fas fa-user"></i>
-                                        </div>
-                                        <span id="userEmailDisplay" class="ml-2 text-sm font-medium">Loading...</span>
-                                    </div>
-                                    <span id="userRole" class="text-xs bg-indigo-900 text-indigo-200 px-2 py-1 rounded-full">Owner</span>
-                                </div>
-                            </div>
+        <main id="settings"> <section class="card bg-gray-800 rounded-lg shadow" aria-labelledby="system-settings-heading">
+                <div class="p-6">
+                    <h2 id="system-settings-heading" class="text-xl font-semibold mb-4">System Settings</h2>
+                    <form id="settingsForm" aria-live="polite"> <div class="mb-4">
+                            <label for="mqttBrokerUrl" class="block text-sm font-medium text-gray-400 mb-1">MQTT Broker URL</label>
+                            <input id="mqttBrokerUrl" type="text" class="w-full p-2 bg-gray-700 rounded" value="wss://broker.hivemq.com:9001/mqtt" disabled title="MQTT Broker URL - This field is disabled and cannot be changed" placeholder="Enter MQTT Broker URL">
                         </div>
-                    </div>
+                        <div class="mb-4">
+                            <label for="mqttUsername" class="block text-sm font-medium text-gray-400 mb-1">MQTT Username</label>
+                            <input id="mqttUsername" type="text" class="w-full p-2 bg-gray-700 rounded" value="don" disabled title="MQTT Username - This field is disabled and cannot be changed" placeholder="Enter MQTT Username">
+                        </div>
+                        <div class="mb-4">
+                            <label for="mqttPassword" class="block text-sm font-medium text-gray-400 mb-1">MQTT Password</label>
+                            <input id="mqttPassword" type="password" class="w-full p-2 bg-gray-700 rounded" value="0106908" disabled title="MQTT Password - This field is disabled and cannot be changed" placeholder="Enter MQTT Password">
+                        </div>
+                        <button id="saveSettingsBtn" class="btn btn-success bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded" aria-label="Save System Settings">
+                            <i class="fas fa-save mr-2" aria-hidden="true"></i> Save Settings
+                        </button>
+                    </form>
+                    <div id="loadingSpinner" class="spinner mt-4 hidden" role="status" aria-label="Saving settings"></div>
                 </div>
-            </div>
-        </div>
-
-        <div id="toastContainer"></div>
+            </section>
+        </main> <div id="toastContainer" class="fixed bottom-4 right-4 space-y-2" role="status" aria-live="polite"></div>
     </div>
 
+    <script src="/common.js"></script>
     <script>
-        const BACKEND_URL = 'http://localhost:3000';
-        const settingsForm = document.getElementById('settingsForm');
-        const notificationsButton = document.getElementById('notificationsButton');
-        const notificationCount = document.getElementById('notificationCount');
-        const toastContainer = document.getElementById('toastContainer');
-        const userEmailEl = document.getElementById('userEmail');
-        const userEmailDisplayEl = document.getElementById('userEmailDisplay');
-        const userRoleEl = document.getElementById('userRole');
-        const logoutBtn = document.getElementById('logoutBtn');
-
+        let systemStatus = { armed: false, lock: 'LOCKED', motion: 'CLEARED', distance: 0, alarm: 'INACTIVE' }; // Retained for common.js functions
         let unreadNotifications = 0;
+        let lastLogMessage = null; // Retained for common.js functions
+        let pollingInterval;
+        let mqttClient;
 
         async function initSettings() {
+            await fetchConfig();
             await fetchUser();
             setupEventListeners();
-        }
-
-        async function fetchUser() {
-            try {
-                const response = await fetch(`${BACKEND_URL}/api/auth/me`, {
-                    headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-                });
-                const data = await response.json();
-                if (!response.ok) throw new Error(data.message || 'Failed to fetch user');
-                userEmailEl.textContent = data.email;
-                userEmailDisplayEl.textContent = data.email;
-                userRoleEl.textContent = data.role;
-            } catch (error) {
-                console.error('Error fetching user:', error);
-                showToast('Failed to load user data', 'error');
-                localStorage.removeItem('token');
-                window.location.href = '/login.html';
-            }
+            mqttClient = connectMqtt();
+            fetchSettings();
+            startPolling();
         }
 
         function setupEventListeners() {
-            settingsForm.addEventListener('submit', saveSettings);
-            notificationsButton.addEventListener('click', showNotifications);
-            logoutBtn.addEventListener('click', () => {
+            document.getElementById('saveSettingsBtn').addEventListener('click', () => {
+                showToast('Settings saved successfully!', 'success');
+            });
+            document.getElementById('notificationsButton').addEventListener('click', showNotifications);
+            document.getElementById('logoutBtn').addEventListener('click', () => {
                 localStorage.removeItem('token');
+                if (mqttClient) mqttClient.end();
                 window.location.href = '/login.html';
             });
         }
 
-        async function saveSettings(event) {
-            event.preventDefault();
+        function startPolling() {
+            if (pollingInterval) clearInterval(pollingInterval);
+            pollingInterval = setInterval(fetchSettings, POLL_INTERVAL);
+        }
+
+        async function fetchSettings() {
             try {
                 toggleLoading(true);
-                const settingsData = {
-                    systemName: document.getElementById('systemName').value,
-                    securityMode: document.querySelector('input[name="security-mode"]:checked').id,
-                    alarmDuration: parseInt(document.getElementById('alarmDuration').value, 10),
-                    alarmSound: document.getElementById('alarmSound').value,
-                    enableNotifications: document.getElementById('enableNotifications').checked
-                };
                 const response = await fetch(`${BACKEND_URL}/api/settings`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${localStorage.getItem('token')}`
-                    },
-                    body: JSON.stringify(settingsData)
+                    headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
                 });
-                if (!response.ok) {
-                    throw new Error('Failed to save settings');
-                }
-                const result = await response.json();
-                showToast('Settings saved successfully!', 'success');
-                console.log('Settings saved:', result);
+                if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
+                const settings = await response.json();
+                updateSettings(settings);
             } catch (error) {
-                console.error('Error saving settings:', error);
-                showToast('Failed to save settings!', 'error');
+                console.error('Error fetching settings:', error);
+                showToast('Failed to load settings. Please check server connectivity.', 'error');
             } finally {
                 toggleLoading(false);
             }
         }
 
+        function updateSettings(settings) {
+            const mqttBrokerUrl = document.getElementById('mqttBrokerUrl');
+            const mqttUsername = document.getElementById('mqttUsername');
+            const mqttPassword = document.getElementById('mqttPassword');
+            const setting = settings.find(s => s.settingName === 'mqttConfig');
+            if (setting) {
+                if (mqttBrokerUrl) mqttBrokerUrl.value = setting.value.brokerUrl || 'wss://broker.hivemq.com:9001/mqtt';
+                if (mqttUsername) mqttUsername.value = setting.value.username || 'don';
+                if (mqttPassword) mqttPassword.value = setting.value.password || '0106908';
+            }
+        }
+
         function showNotifications() {
+            const notificationsButton = document.getElementById('notificationsButton');
+            const notificationCount = document.getElementById('notificationCount');
             if (unreadNotifications === 0) {
                 showToast('No new notifications', 'info');
                 return;
             }
             const notificationList = document.createElement('div');
-            notificationList.className = 'notification-list';
+            notificationList.className = 'notification-list bg-gray-700 p-4 rounded shadow';
+            const ul = document.createElement('ul');
+            ul.setAttribute('role', 'list');
             for (let i = 0; i < unreadNotifications; i++) {
-                const notificationItem = document.createElement('div');
-                notificationItem.className = 'notification-item';
-                notificationItem.textContent = `Notification ${i + 1}`;
-                notificationList.appendChild(notificationItem);
+                const li = document.createElement('li');
+                li.className = 'notification-item text-gray-200 py-1';
+                li.textContent = `New Event ${i + 1} requiring attention.`;
+                ul.appendChild(li);
             }
+            notificationList.appendChild(ul);
             showToast(notificationList, 'info', true);
             unreadNotifications = 0;
-            updateNotificationCount();
-        }
-
-        function updateNotificationCount() {
-            notificationCount.textContent = unreadNotifications > 0 ? unreadNotifications : '';
-            notificationsButton.classList.toggle('has-notifications', unreadNotifications > 0);
+            notificationCount.textContent = '';
+            notificationCount.classList.add('hidden');
+            notificationsButton.classList.remove('has-notifications');
+            notificationsButton.setAttribute('aria-label', 'View Notifications. No unread notifications.');
         }
 
         function incrementNotificationCount() {
             unreadNotifications++;
-            updateNotificationCount();
+            const notificationCount = document.getElementById('notificationCount');
+            notificationCount.textContent = unreadNotifications;
+            notificationCount.classList.remove('hidden');
+            document.getElementById('notificationsButton').classList.add('has-notifications');
+            document.getElementById('notificationsButton').setAttribute('aria-label', `View Notifications. ${unreadNotifications} unread notifications.`);
         }
 
-        function showToast(message, type = 'info', persistent = false) {
-            const toast = document.createElement('div');
-            toast.className = `toast toast-${type}`;
-            toast.innerHTML = `
-                <div class="toast-content">${message}</div>
-                <button class="toast-close" onclick="this.parentElement.remove()">×</button>
-            `;
-            if (!persistent) {
-                setTimeout(() => {
-                    toast.remove();
-                }, 5000);
-            }
-            toastContainer.appendChild(toast);
-            if (type === 'error') {
-                console.error('Toast Error:', message);
-            } else if (type === 'success') {
-                console.log('Toast Success:', message);
-            } else {
-                console.log('Toast Info:', message);
-            }
+        async function initSettings() {
+            await fetchConfig();
+            await fetchUser();
+            setupEventListeners();
+            mqttClient = connectMqtt();
+            fetchSettings();
+            startPolling();
+            speak('You are now on the Settings page.'); // NEW
+            playBeep(1);
         }
-
-        function toggleLoading(show) {
-            const spinner = document.createElement('div');
-            spinner.className = 'spinner';
-            spinner.style.display = show ? 'block' : 'none';
-            settingsForm.appendChild(spinner);
-        }
-
         document.addEventListener('DOMContentLoaded', initSettings);
     </script>
 </body>

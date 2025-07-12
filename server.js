@@ -1,3 +1,4 @@
+// server.js
 const express = require('express');
 const dotenv = require('dotenv');
 const cors = require('cors');
@@ -5,21 +6,83 @@ const mongoose = require('mongoose');
 const mqtt = require('mqtt');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const connectDB = require('./config/db');
-const Device = require('./models/Device');
-const Log = require('./models/Log');
-const Setting = require('./models/Settings');
-const User = require('./models/User');
-const Path = require('path');
+const path = require('path');
+const rateLimit = require('express-rate-limit');
 
 dotenv.config();
-connectDB();
 
 const app = express();
-app.use(cors());
+
+mongoose.connect(process.env.MONGODB_URI)
+    .then(() => console.log('Connected to MongoDB'))
+    .catch((err) => console.error('MongoDB connection error:', err));
+
+const DeviceSchema = new mongoose.Schema({
+    deviceId: { type: String, required: true, unique: true },
+    name: { type: String, required: true },
+    type: { type: String, required: true },
+    room: { type: String, required: true },
+    status: { type: String, default: 'IDLE' },
+    value: Number,
+    isArmed: Boolean,
+    lastActivity: Date
+});
+const LogSchema = new mongoose.Schema({
+    message: String,
+    timestamp: { type: Date, default: Date.now },
+    type: { type: String, default: 'info' }
+});
+const SettingSchema = new mongoose.Schema({
+    settingName: { type: String, required: true, unique: true },
+    value: mongoose.Mixed
+});
+const UserSchema = new mongoose.Schema({
+    email: { type: String, required: true, unique: true },
+    password: { type: String, required: true },
+    name: { type: String, required: true }
+});
+
+const Device = mongoose.model('Device', DeviceSchema);
+const Log = mongoose.model('Log', LogSchema);
+const Setting = mongoose.model('Setting', SettingSchema);
+const User = mongoose.model('User', UserSchema);
+
+app.use(cors({ origin: process.env.NODE_ENV === 'production' ? process.env.RENDER_EXTERNAL_URL : '*' }));
 app.use(express.json());
 
-// --- JWT Middleware ---
+const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 1000,
+    message: { message: 'Too many requests, please try again later' }
+});
+app.use('/api/auth/login', limiter);
+app.use('/api/auth/register', limiter);
+
+app.use(express.static(path.join(__dirname, 'public')));
+
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'login.html'));
+});
+
+app.get('/dashboard.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
+});
+app.get('/devices.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'devices.html'));
+});
+app.get('/analytics.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'analytics.html'));
+});
+app.get('/settings.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'settings.html'));
+});
+app.get('/login.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'login.html'));
+});
+app.get('/register.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'register.html'));
+});
+
 const authenticateToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
@@ -32,193 +95,203 @@ const authenticateToken = (req, res, next) => {
     });
 };
 
-// --- MQTT Client Setup ---
-const mqttOptions = {
-    clientId: `mqttjs_${Math.random().toString(16).substr(2, 8)}`,
-    username: process.env.MQTT_USERNAME,
-    password: process.env.MQTT_PASSWORD,
-};
+const mqttBrokerUrl = process.env.MQTT_BROKER_URL;
+if (!mqttBrokerUrl) {
+    console.error('MQTT_BROKER_URL environment variable is not set. MQTT client will not connect.');
+} else {
+    console.log('Attempting to connect to MQTT Broker:', mqttBrokerUrl);
+    const mqttOptions = {
+        clientId: `mqttjs_${Math.random().toString(16).slice(2, 8)}`,
+        username: process.env.MQTT_USERNAME,
+        password: process.env.MQTT_PASSWORD,
+        connectTimeout: 5000,
+        keepalive: 60,
+        reconnectPeriod: 1000
+    };
 
-const mqttClient = mqtt.connect(process.env.MQTT_BROKER_URL, mqttOptions);
+    const mqttClient = mqtt.connect(mqttBrokerUrl, mqttOptions);
 
-mqttClient.on('connect', () => {
-    console.log('Connected to MQTT Broker');
-    const topics = [
-        'home/lock/status',
-        'home/sensor/motion',
-        'home/sensor/distance',
-        'home/security/alarm',
-        'home/security/armed',
-        'home/rfid/events',
-        'home/light/status'
-    ];
-    topics.forEach(topic => {
-        mqttClient.subscribe(topic, (err) => {
-            if (!err) console.log(`Subscribed to ${topic}`);
-            else console.error(`Failed to subscribe to ${topic}:`, err);
+    mqttClient.on('connect', () => {
+        console.log(`Connected to MQTT Broker at ${mqttBrokerUrl}`);
+        const topics = [
+            'home/lock/status',
+            'home/sensor/motion',
+            'home/sensor/distance',
+            'home/security/alarm',
+            'home/security/armed',
+            'home/rfid/events'
+        ];
+        topics.forEach(topic => {
+            mqttClient.subscribe(topic, { qos: 1 }, (err) => {
+                if (!err) console.log(`Subscribed to ${topic}`);
+                else console.error(`Failed to subscribe to ${topic}:`, err);
+            });
         });
+    });
+
+    mqttClient.on('message', async (topic, message) => {
+        const payload = message.toString();
+        console.log(`MQTT Message - Topic: ${topic}, Payload: ${payload}`);
+
+        try {
+            let deviceId, status, value, logMessage, logType = 'info';
+
+            switch (topic) {
+                case 'home/lock/status':
+                    deviceId = 'smartLock001';
+                    status = payload;
+                    await Device.findOneAndUpdate(
+                        { deviceId },
+                        { status, isArmed: status === 'LOCKED', lastActivity: Date.now() },
+                        { upsert: true, new: true }
+                    );
+                    logMessage = `Smart Lock status: ${status}`;
+                    if (status === 'UNLOCKED') {
+                        const ultrasonic = await Device.findOne({ deviceId: 'ultrasonicSensor001' });
+                        if (ultrasonic && ultrasonic.value > 0 && ultrasonic.value < 8) {
+                            logMessage = 'Door unlocked by RFID at close distance';
+                            logType = 'success';
+                        }
+                    }
+                    break;
+
+                case 'home/sensor/motion':
+                    deviceId = 'motionSensor001';
+                    status = payload;
+                    await Device.findOneAndUpdate(
+                        { deviceId },
+                        { status, lastActivity: Date.now() },
+                        { upsert: true, new: true }
+                    );
+                    logMessage = `Motion Sensor status: ${status}`;
+                    if (status === 'DETECTED') logType = 'warning';
+                    break;
+
+                case 'home/sensor/distance':
+                    deviceId = 'ultrasonicSensor001';
+                    value = parseFloat(payload);
+                    await Device.findOneAndUpdate(
+                        { deviceId },
+                        { value, lastActivity: Date.now() },
+                        { upsert: true, new: true }
+                    );
+                    logMessage = `Ultrasonic Sensor distance: ${value} cm`;
+                    if (value > 0 && value < 15) logType = 'warning';
+                    break;
+
+                case 'home/security/alarm':
+                    deviceId = 'siren001';
+                    status = payload;
+                    await Device.findOneAndUpdate(
+                        { deviceId },
+                        { status, lastActivity: Date.now() },
+                        { upsert: true, new: true }
+                    );
+                    logMessage = `Alarm status: ${status}`;
+                    if (status === 'ACTIVE') logType = 'danger';
+                    break;
+
+                case 'home/security/armed':
+                    await Setting.findOneAndUpdate(
+                        { settingName: 'systemArmed' },
+                        { value: payload === 'ARMED', lastActivity: Date.now() },
+                        { upsert: true, new: true }
+                    );
+                    logMessage = `Security system is now: ${payload}`;
+                    if (payload === 'ARMED') logType = 'success';
+                    break;
+
+                case 'home/rfid/events':
+                    logMessage = payload.includes('Authorized Tag') ? 'Valid key card scanned' : 'Invalid key card scanned';
+                    logType = payload.includes('Authorized Tag') ? 'success' : 'alert';
+                    break;
+            }
+
+            if (logMessage) {
+                await Log.create({ message: logMessage, type: logType });
+            }
+        } catch (error) {
+            console.error(`Error processing MQTT message for topic ${topic}:`, error);
+        }
+    });
+
+    mqttClient.on('error', (err) => {
+        console.error('MQTT Client Error:', err);
+    });
+
+    mqttClient.on('close', () => {
+        console.log('MQTT connection closed. Attempting to reconnect...');
+    });
+}
+
+app.get('/api/config', (req, res) => {
+    let backendHost;
+    if (process.env.NODE_ENV === 'production' && process.env.RENDER_EXTERNAL_HOSTNAME) {
+        backendHost = process.env.RENDER_EXTERNAL_HOSTNAME;
+    } else {
+        backendHost = req.headers.host || '127.0.0.1:3000';
+    }
+
+    const clientMqttBrokerUrl = process.env.MQTT_BROKER_CLIENT_URL || process.env.MQTT_BROKER_URL;
+
+    res.json({
+        backendHost: backendHost.split(':')[0],
+        mqttBrokerClientUrl: clientMqttBrokerUrl
     });
 });
 
-mqttClient.on('message', async (topic, message) => {
-    const payload = message.toString();
-    console.log(`MQTT Message - Topic: ${topic}, Payload: ${payload}`);
+app.post('/api/auth/register', limiter, async (req, res) => {
+    const { email, password, name } = req.body;
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) return res.status(400).json({ message: 'Invalid email format' });
+    if (password.length < 8) return res.status(400).json({ message: 'Password must be at least 8 characters' });
+    if (!name.trim()) return res.status(400).json({ message: 'Name is required' });
 
-    try {
-        let deviceId, status, value, logMessage, logType = 'info';
-
-        switch (topic) {
-            case 'home/lock/status':
-                deviceId = 'smartLock001';
-                status = payload;
-                await Device.findOneAndUpdate(
-                    { deviceId },
-                    { status, isArmed: status === 'LOCKED', lastActivity: Date.now() },
-                    { upsert: true, new: true }
-                );
-                logMessage = `Smart Lock status: ${status}`;
-                break;
-
-            case 'home/sensor/motion':
-                deviceId = 'motionSensor001';
-                status = payload;
-                await Device.findOneAndUpdate(
-                    { deviceId },
-                    { status, lastActivity: Date.now() },
-                    { upsert: true, new: true }
-                );
-                logMessage = `Motion Sensor status: ${status}`;
-                if (status === 'DETECTED') logType = 'warning';
-                break;
-
-            case 'home/sensor/distance':
-                deviceId = 'ultrasonicSensor001';
-                value = parseFloat(payload);
-                await Device.findOneAndUpdate(
-                    { deviceId },
-                    { value, lastActivity: Date.now() },
-                    { upsert: true, new: true }
-                );
-                logMessage = `Ultrasonic Sensor distance: ${value} cm`;
-                if (value > 0 && value < 15) logType = 'warning';
-                break;
-
-            case 'home/security/alarm':
-                deviceId = 'siren001';
-                status = payload;
-                await Device.findOneAndUpdate(
-                    { deviceId },
-                    { status, isArmed: status === 'ACTIVE', lastActivity: Date.now() },
-                    { upsert: true, new: true }
-                );
-                logMessage = `Alarm status: ${status}`;
-                if (status === 'ACTIVE') logType = 'danger';
-                break;
-
-            case 'home/security/armed':
-                const armedStatus = payload === 'ARMED';
-                await Setting.findOneAndUpdate(
-                    { settingName: 'systemArmed' },
-                    { value: armedStatus, lastActivity: Date.now() },
-                    { upsert: true, new: true }
-                );
-                logMessage = `Security system is now: ${payload}`;
-                logType = armedStatus ? 'success' : 'info';
-                break;
-
-            case 'home/rfid/events':
-                logMessage = payload;
-                logType = payload.includes('Authorized Tag') ? 'success' : 'alert';
-                break;
-
-            case 'home/light/status':
-                deviceId = 'smartLight001';
-                status = payload;
-                await Device.findOneAndUpdate(
-                    { deviceId },
-                    { status, lastActivity: Date.now() },
-                    { upsert: true, new: true }
-                );
-                logMessage = `Smart Light status: ${status}`;
-                break;
-        }
-
-        if (logMessage) {
-            await Log.create({ message: logMessage, type: logType, timestamp: new Date() });
-        }
-    } catch (error) {
-        console.error('Error processing MQTT message:', error);
-        await Log.create({
-            message: `Backend error processing MQTT: ${error.message}`,
-            type: 'danger',
-            timestamp: new Date()
-        });
-    }
-});
-
-mqttClient.on('error', (err) => {
-    console.error('MQTT Client Error:', err);
-});
-
-// --- Authentication Routes ---
-app.post('/api/auth/register', async (req, res) => {
-    const { email, password, confirmPassword } = req.body;
-    if (!email || !password || !confirmPassword) {
-        return res.status(400).json({ message: 'All fields are required' });
-    }
-    if (password !== confirmPassword) {
-        return res.status(400).json({ message: 'Passwords do not match' });
-    }
     try {
         const existingUser = await User.findOne({ email });
-        if (existingUser) {
-            return res.status(400).json({ message: 'Email already registered' });
-        }
+        if (existingUser) return res.status(400).json({ message: 'User already exists' });
+
         const hashedPassword = await bcrypt.hash(password, 10);
-        const user = await User.create({ email, password: hashedPassword });
-        res.status(201).json({ message: 'User registered successfully' });
+        const user = await User.create({ email, password: hashedPassword, name });
+        const token = jwt.sign({ email: user.email, name: user.name }, process.env.JWT_SECRET, { expiresIn: '1h' });
+        res.status(201).json({ token, user: { email, name } });
     } catch (error) {
-        console.error('Error registering user:', error);
+        console.error('Registration error:', error);
         res.status(500).json({ message: 'Server error' });
     }
 });
 
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', limiter, async (req, res) => {
     const { email, password } = req.body;
-    if (!email || !password) {
-        return res.status(400).json({ message: 'Email and password are required' });
-    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) return res.status(400).json({ message: 'Invalid email format' });
+
     try {
         const user = await User.findOne({ email });
-        if (!user) {
-            return res.status(401).json({ message: 'Invalid email or password' });
-        }
+        if (!user) return res.status(400).json({ message: 'Invalid credentials' });
+
         const isMatch = await bcrypt.compare(password, user.password);
-        if (!isMatch) {
-            return res.status(401).json({ message: 'Invalid email or password' });
-        }
-        const token = jwt.sign({ userId: user._id, email: user.email }, process.env.JWT_SECRET, { expiresIn: '1h' });
-        res.json({ token, message: 'Login successful' });
+        if (!isMatch) return res.status(400).json({ message: 'Invalid credentials' });
+
+        const token = jwt.sign({ email: user.email, name: user.name }, process.env.JWT_SECRET, { expiresIn: '1h' });
+        res.json({ token, user: { email: user.email, name: user.name } });
     } catch (error) {
-        console.error('Error logging in:', error);
+        console.error('Login error:', error);
         res.status(500).json({ message: 'Server error' });
     }
 });
 
 app.get('/api/auth/me', authenticateToken, async (req, res) => {
     try {
-        const user = await User.findById(req.user.userId).select('email');
-        if (!user) {
-            return res.status(404).json({ message: 'User not found' });
-        }
-        res.json({ email: user.email, role: 'Owner' });
+        const user = await User.findOne({ email: req.user.email }).select('-password');
+        if (!user) return res.status(404).json({ message: 'User not found' });
+        res.json({ email: user.email, name: user.name });
     } catch (error) {
         console.error('Error fetching user:', error);
         res.status(500).json({ message: 'Server error' });
     }
 });
 
-// --- Device Routes ---
 app.get('/api/devices', authenticateToken, async (req, res) => {
     try {
         const devices = await Device.find();
@@ -229,150 +302,41 @@ app.get('/api/devices', authenticateToken, async (req, res) => {
     }
 });
 
-app.put('/api/devices/:deviceId', authenticateToken, async (req, res) => {
-    const { deviceId } = req.params;
-    const { name } = req.body;
-    if (!name || name.trim() === '' || name.toLowerCase() === 'undefine' || name.toLowerCase() === 'undefined') {
-        return res.status(400).json({ message: 'Invalid device name' });
+app.post('/api/devices', authenticateToken, async (req, res) => {
+    const { deviceId, name, type, room, status } = req.body;
+    if (!deviceId || !name || !type || !room) {
+        return res.status(400).json({ message: 'deviceId, name, type, and room are required' });
     }
+
     try {
-        const device = await Device.findOneAndUpdate(
-            { deviceId },
-            { name: name.trim() },
-            { new: true }
-        );
-        if (!device) {
-            return res.status(404).json({ message: 'Device not found' });
+        const existingDevice = await Device.findOne({ deviceId });
+        if (existingDevice) {
+            return res.status(400).json({ message: `Device with deviceId ${deviceId} already exists` });
         }
-        await Log.create({
-            message: `Device ${deviceId} renamed to ${name}`,
-            type: 'info',
-            timestamp: new Date()
+
+        const device = await Device.create({
+            deviceId,
+            name,
+            type,
+            room,
+            status: status || 'IDLE',
+            lastActivity: Date.now()
         });
-        res.json(device);
+        console.log(`Created device: ${deviceId}`);
+        await Log.create({ message: `Device added: ${name} (${deviceId})`, type: 'info' });
+        res.status(201).json(device);
     } catch (error) {
-        console.error('Error renaming device:', error);
+        console.error('Error creating device:', error);
         res.status(500).json({ message: 'Server error' });
     }
 });
 
-app.post('/api/devices/:deviceId/toggle', authenticateToken, async (req, res) => {
-    const { deviceId } = req.params;
+app.get('/api/logs', authenticateToken, async (req, res) => {
     try {
-        const device = await Device.findOne({ deviceId });
-        if (!device) {
-            return res.status(404).json({ message: 'Device not found' });
-        }
-        if (!device.type) {
-            return res.status(400).json({ message: 'Device type is missing' });
-        }
-
-        let topic, payload, newStatus, newIsArmed;
-        switch (device.type) {
-            case 'smartLock':
-                topic = 'home/lock/set';
-                payload = device.status === 'LOCKED' ? 'UNLOCK' : 'LOCK';
-                newStatus = payload === 'LOCK' ? 'LOCKED' : 'UNLOCKED';
-                newIsArmed = payload === 'LOCK';
-                break;
-            case 'smartLight':
-                topic = 'home/light/set';
-                payload = device.status === 'ON' ? 'OFF' : 'ON';
-                newStatus = payload;
-                newIsArmed = false;
-                break;
-            case 'siren':
-                topic = 'home/security/setAlarm';
-                payload = device.status === 'ACTIVE' ? 'DEACTIVATE' : 'ACTIVATE';
-                newStatus = payload === 'ACTIVATE' ? 'ACTIVE' : 'INACTIVE';
-                newIsArmed = payload === 'ACTIVATE';
-                break;
-            default:
-                return res.status(400).json({ message: 'Device type does not support toggling' });
-        }
-
-        if (mqttClient.connected) {
-            mqttClient.publish(topic, payload, { qos: 1 }, async (err) => {
-                if (err) {
-                    console.error(`Failed to publish to ${topic}:`, err);
-                    return res.status(500).json({ message: 'Failed to send command to MQTT' });
-                }
-                console.log(`Published command to ${topic}: ${payload}`);
-                const updatedDevice = await Device.findOneAndUpdate(
-                    { deviceId },
-                    { status: newStatus, isArmed: newIsArmed, lastActivity: Date.now() },
-                    { new: true }
-                );
-                await Log.create({
-                    message: `Device ${deviceId} (${device.name}) toggled to ${newStatus}`,
-                    type: 'info',
-                    timestamp: new Date()
-                });
-                res.json(updatedDevice);
-            });
-        } else {
-            console.error('MQTT client not connected');
-            res.status(500).json({ message: 'MQTT client not connected' });
-        }
+        const logs = await Log.find().sort({ timestamp: -1 }).limit(50);
+        res.json(logs);
     } catch (error) {
-        console.error('Error toggling device:', error);
-        res.status(500).json({ message: 'Server error' });
-    }
-});
-
-// --- Other Protected Routes ---
-app.post('/api/commands', authenticateToken, async (req, res) => {
-    const { command } = req.body;
-    if (!command) {
-        return res.status(400).json({ message: 'Command is required' });
-    }
-
-    try {
-        let topic, payload;
-        switch (command.toUpperCase()) {
-            case 'ARM':
-                topic = 'home/security/setArmed';
-                payload = 'ARMED';
-                break;
-            case 'DISARM':
-                topic = 'home/security/setArmed';
-                payload = 'DISARMED';
-                break;
-            case 'LOCK':
-                topic = 'home/lock/set';
-                payload = 'LOCK';
-                break;
-            case 'UNLOCK':
-                topic = 'home/lock/set';
-                payload = 'UNLOCK';
-                break;
-            case 'ACTIVATE':
-                topic = 'home/security/setAlarm';
-                payload = 'ACTIVATE';
-                break;
-            case 'DEACTIVATE':
-                topic = 'home/security/setAlarm';
-                payload = 'DEACTIVATE';
-                break;
-            default:
-                return res.status(400).json({ message: 'Invalid command' });
-        }
-
-        if (mqttClient.connected) {
-            mqttClient.publish(topic, payload, { qos: 1 }, (err) => {
-                if (err) {
-                    console.error(`Failed to publish to ${topic}:`, err);
-                    return res.status(500).json({ message: 'Failed to send command to MQTT' });
-                }
-                console.log(`Published command to ${topic}: ${payload}`);
-                res.json({ message: `Command ${command} sent successfully` });
-            });
-        } else {
-            console.error('MQTT client not connected');
-            res.status(500).json({ message: 'MQTT client not connected' });
-        }
-    } catch (error) {
-        console.error('Error processing command:', error);
+        console.error('Error fetching logs:', error);
         res.status(500).json({ message: 'Server error' });
     }
 });
@@ -380,30 +344,73 @@ app.post('/api/commands', authenticateToken, async (req, res) => {
 app.post('/api/logs/clear', authenticateToken, async (req, res) => {
     try {
         await Log.deleteMany({});
-        await Log.create({
-            message: 'Activity logs cleared',
-            type: 'info',
-            timestamp: new Date()
-        });
-        res.json({ message: 'Logs cleared successfully' });
+        res.json({ message: 'Logs cleared' });
     } catch (error) {
         console.error('Error clearing logs:', error);
-        res.status(500).json({ message: 'Failed to clear logs' });
+        res.status(500).json({ message: 'Server error' });
     }
 });
 
-// --- Serve Static Files ---
-app.get('/', (req, res) => {
-    res.sendFile(Path.join(__dirname, 'public', 'login.html'));
+app.get('/api/settings', authenticateToken, async (req, res) => {
+    try {
+        const settings = await Setting.find();
+        res.json(settings);
+    } catch (error) {
+        console.error('Error fetching settings:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
 });
 
-app.use(express.static(Path.join(__dirname, 'public')));
+app.post('/api/commands', authenticateToken, async (req, res) => {
+    const { command } = req.body;
+    const validCommands = ['ARM', 'DISARM', 'LOCK', 'UNLOCK'];
+    if (!validCommands.includes(command)) {
+        return res.status(400).json({ message: 'Invalid command' });
+    }
 
-// --- Start Server ---
+    try {
+        if (!mqttClient || !mqttClient.connected) {
+            console.warn('MQTT client not connected, cannot send command.');
+            return res.status(503).json({ message: 'MQTT service unavailable' });
+        }
+        const topic = command === 'ARM' || command === 'DISARM' ? 'home/security/armed' : 'home/lock/status';
+        const payload = command === 'ARM' ? 'ARMED' : command === 'DISARM' ? 'DISARMED' : command;
+        mqttClient.publish(topic, payload, { qos: 1 }, (err) => {
+            if (err) {
+                console.error(`Error publishing to ${topic}:`, err);
+                return res.status(500).json({ message: 'Failed to send command' });
+            }
+            console.log(`Published command ${command} to ${topic}`);
+            res.json({ message: `Command ${command} sent` });
+        });
+    } catch (error) {
+        console.error('Error sending command:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, async () => {
-    console.log(`Server running on port ${PORT} in ${process.env.NODE_ENV || 'development'} mode`);
-    if (require('./controllers/settingsController').initializeDefaultSettings) {
-        await require('./controllers/settingsController').initializeDefaultSettings();
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server running on port ${PORT} in ${process.env.NODE_ENV} mode`);
+    if (process.env.NODE_ENV === 'production' && process.env.RENDER_EXTERNAL_HOSTNAME) {
+        console.log(`Production URL: https://${process.env.RENDER_EXTERNAL_HOSTNAME}`);
+    } else {
+        console.log(`Local Access: http://localhost:${PORT}`);
+        console.log(`Local Network Access: http://${getPublicIp()}:${PORT}`);
     }
 });
+
+function getPublicIp() {
+    const os = require('os');
+    const interfaces = os.networkInterfaces();
+    for (const devName in interfaces) {
+        const iface = interfaces[devName];
+        for (let i = 0; i < iface.length; i++) {
+            const alias = iface[i];
+            if (alias.family === 'IPv4' && alias.address !== '127.0.0.1' && !alias.internal) {
+                return alias.address;
+            }
+        }
+    }
+    return 'UNKNOWN_IP';
+}

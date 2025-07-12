@@ -6,9 +6,10 @@
     <title>Smart Home Security - Devices</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/mqtt@5.0.5/dist/mqtt.min.js"></script>
     <link rel="stylesheet" href="/styles.css">
 </head>
-<body class="min-h-screen">
+<body class="min-h-screen bg-gray-900 text-gray-100">
     <script>
         if (!localStorage.getItem('token')) {
             window.location.href = '/login.html';
@@ -16,103 +17,71 @@
     </script>
     <div class="container mx-auto px-4 py-8 max-w-7xl">
         <header class="flex justify-between items-center mb-8">
-            <h1 class="text-3xl font-bold text-white">Smart Home Security Dashboard</h1>
+            <h1 class="text-3xl font-bold text-white">Smart Home Security - Devices</h1>
             <div class="flex items-center gap-4">
                 <div class="relative">
-                    <button id="notificationsButton" class="p-2 rounded-full hover:bg-gray-700 relative">
-                        <i class="fas fa-bell text-gray-300"></i>
-                        <span id="notificationCount" class="notification-badge hidden">0</span>
+                    <button id="notificationsButton" class="p-2 rounded-full hover:bg-gray-700 relative" aria-label="View Notifications">
+                        <i class="fas fa-bell text-gray-300" aria-hidden="true"></i>
+                        <span id="notificationCount" class="notification-badge hidden" aria-live="polite" aria-atomic="true">0</span>
                     </button>
                 </div>
                 <div class="flex items-center gap-2">
                     <div class="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center text-white">
-                        <i class="fas fa-user"></i>
+                        <i class="fas fa-user" aria-hidden="true"></i>
                     </div>
                     <span id="userEmail" class="font-medium">Loading...</span>
                 </div>
-                <button id="logoutBtn" class="btn btn-secondary"><i class="fas fa-sign-out-alt mr-2"></i> Logout</button>
+                <button id="logoutBtn" class="btn btn-secondary" aria-label="Logout"><i class="fas fa-sign-out-alt mr-2" aria-hidden="true"></i> Logout</button>
             </div>
         </header>
 
-        <nav class="flex border-b border-gray-700 mb-6">
+        <nav class="flex border-b border-gray-700 mb-6" aria-label="Main Navigation">
             <a href="/dashboard.html" class="tab-button">Dashboard</a>
-            <a href="/devices.html" class="tab-button active">Devices</a>
+            <a href="/devices.html" class="tab-button active" aria-current="page">Devices</a>
             <a href="/analytics.html" class="tab-button">Analytics</a>
             <a href="/settings.html" class="tab-button">Settings</a>
         </nav>
 
-        <div id="devices">
-            <div class="card mb-6">
+        <main id="devices"> <section class="card bg-gray-800 rounded-lg shadow" aria-labelledby="manage-devices-heading">
                 <div class="p-6">
-                    <h2 class="text-xl font-semibold mb-4">Connected Devices</h2>
-                    <div class="overflow-x-auto">
-                        <table class="min-w-full divide-y divide-gray-700">
-                            <thead class="bg-gray-800">
-                                <tr>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Device Name</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Type</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Status</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Last Active</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody id="devicesTableBody" class="bg-gray-800 divide-y divide-gray-700">
-                                <tr>
-                                    <td colspan="5" class="px-6 py-4 text-center text-gray-500">Loading devices...</td>
-                                </tr>
-                            </tbody>
-                        </table>
+                    <h2 id="manage-devices-heading" class="text-xl font-semibold mb-4">Manage Devices</h2>
+                    <div id="deviceList" class="space-y-4" role="region" aria-live="polite">
+                        <div class="text-center text-gray-500 py-4">Loading devices...</div>
                     </div>
-                    <div id="loadingSpinner" class="spinner mt-4"></div>
+                    <button id="addDeviceBtn" class="btn btn-success mt-4 bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded" aria-label="Add New Device">
+                        <i class="fas fa-plus mr-2" aria-hidden="true"></i> Add Device
+                    </button>
+                    <div id="loadingSpinner" class="spinner mt-4 hidden" role="status" aria-label="Loading devices"></div>
                 </div>
-            </div>
-        </div>
-
-        <div id="toastContainer"></div>
+            </section>
+        </main> <div id="toastContainer" class="fixed bottom-4 right-4 space-y-2" role="status" aria-live="polite"></div>
     </div>
 
+    <script src="/common.js"></script>
     <script>
-        const BACKEND_URL = 'http://localhost:3000';
-        const POLL_INTERVAL = 2000;
-
-        const devicesTableBody = document.getElementById('devicesTableBody');
-        const notificationsButton = document.getElementById('notificationsButton');
-        const notificationCount = document.getElementById('notificationCount');
-        const loadingSpinner = document.getElementById('loadingSpinner');
-        const toastContainer = document.getElementById('toastContainer');
-        const userEmailEl = document.getElementById('userEmail');
-        const logoutBtn = document.getElementById('logoutBtn');
-
+        let systemStatus = { armed: false, lock: 'LOCKED', motion: 'CLEARED', distance: 0, alarm: 'INACTIVE' }; // Retained for common.js functions
         let unreadNotifications = 0;
+        let lastLogMessage = null; // Retained for common.js functions
         let pollingInterval;
+        let mqttClient;
 
         async function initDevices() {
+            await fetchConfig();
             await fetchUser();
             setupEventListeners();
+            mqttClient = connectMqtt();
             fetchDevices();
             startPolling();
         }
 
-        async function fetchUser() {
-            try {
-                const response = await fetch(`${BACKEND_URL}/api/auth/me`, {
-                    headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-                });
-                const data = await response.json();
-                if (!response.ok) throw new Error(data.message || 'Failed to fetch user');
-                userEmailEl.textContent = data.email;
-            } catch (error) {
-                console.error('Error fetching user:', error);
-                showToast('Failed to load user data', 'error');
-                localStorage.removeItem('token');
-                window.location.href = '/login.html';
-            }
-        }
-
         function setupEventListeners() {
-            notificationsButton.addEventListener('click', showNotifications);
-            logoutBtn.addEventListener('click', () => {
+            document.getElementById('addDeviceBtn').addEventListener('click', () => {
+                showToast('Add device functionality not implemented yet.', 'info');
+            });
+            document.getElementById('notificationsButton').addEventListener('click', showNotifications);
+            document.getElementById('logoutBtn').addEventListener('click', () => {
                 localStorage.removeItem('token');
+                if (mqttClient) mqttClient.end();
                 window.location.href = '/login.html';
             });
         }
@@ -128,167 +97,94 @@
                 const response = await fetch(`${BACKEND_URL}/api/devices`, {
                     headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
                 });
-                if (!response.ok) throw new Error('Failed to fetch devices');
+                if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
                 const devices = await response.json();
-                updateDevicesTable(devices);
+                updateDeviceList(devices);
             } catch (error) {
                 console.error('Error fetching devices:', error);
-                showToast('Failed to fetch devices!', 'error');
+                showToast('Failed to load devices. Please check server connectivity.', 'error');
             } finally {
                 toggleLoading(false);
             }
         }
 
-        function updateDevicesTable(devices) {
-            devicesTableBody.innerHTML = '';
+        function updateDeviceList(devices) {
+            const deviceListEl = document.getElementById('deviceList');
             if (devices.length === 0) {
-                devicesTableBody.innerHTML = '<tr><td colspan="5" class="px-6 py-4 text-center text-gray-500">No devices found</td></tr>';
+                deviceListEl.innerHTML = '<div class="text-center text-gray-500 py-4">No devices found.</div>';
                 return;
             }
-            devices.forEach(device => {
-                const isToggleable = ['smartLock', 'smartLight', 'siren'].includes(device.type);
-                const toggleText = device.status === 'ON' || device.status === 'LOCKED' || device.status === 'ACTIVE' ? 'Turn Off' : 'Turn On';
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td class="px-6 py-4">
-                        <input type="text" value="${device.name || device.deviceId}" data-device-id="${device.deviceId}" class="device-name-input w-full px-2 py-1 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" />
-                    </td>
-                    <td class="px-6 py-4">${device.type || 'Unknown'}</td>
-                    <td class="px-6 py-4">${device.status}</td>
-                    <td class="px-6 py-4">${new Date(device.lastActivity).toLocaleString()}</td>
-                    <td class="px-6 py-4">
-                        <button class="btn btn-secondary btn-sm toggle-btn" data-device-id="${device.deviceId}" ${!isToggleable ? 'disabled' : ''}>
-                            ${toggleText}
-                        </button>
-                    </td>
-                `;
-                devicesTableBody.appendChild(row);
-            });
-
-            document.querySelectorAll('.device-name-input').forEach(input => {
-                input.addEventListener('change', async (e) => {
-                    const deviceId = e.target.dataset.deviceId;
-                    const newName = e.target.value.trim();
-                    if (newName && newName.toLowerCase() !== 'undefine' && newName.toLowerCase() !== 'undefined') {
-                        await renameDevice(deviceId, newName);
-                    } else {
-                        e.target.value = devices.find(d => d.deviceId === deviceId).name || deviceId;
-                        showToast('Device name cannot be empty or invalid', 'error');
-                    }
-                });
-            });
-
-            document.querySelectorAll('.toggle-btn').forEach(button => {
-                button.addEventListener('click', async (e) => {
-                    const deviceId = e.target.dataset.deviceId;
-                    await toggleDevice(deviceId);
-                });
-            });
+            // Used a semantic list (`ul`) for devices for better screen reader experience
+            deviceListEl.innerHTML = `<ul role="list" class="space-y-4">` + devices.map(device => `
+                <li class="bg-gray-700 p-4 rounded shadow" aria-label="${device.name}, status ${device.status}, in ${device.room} room.">
+                    <h3 class="text-lg font-medium">${device.name}</h3>
+                    <p class="text-sm text-gray-400">ID: <span class="font-mono" aria-hidden="true">${device.deviceId}</span></p>
+                    <p class="text-sm text-gray-400">Type: ${device.type}</p>
+                    <p class="text-sm text-gray-400">Room: ${device.room}</p>
+                    <p class="text-sm text-gray-400">Status: <span class="status-badge ${getDeviceStatusClass(device.status)}" aria-label="${device.name} is ${device.status}">${device.status}</span></p>
+                </li>
+            `).join('') + `</ul>`;
         }
 
-        async function renameDevice(deviceId, name) {
-            try {
-                toggleLoading(true);
-                const response = await fetch(`${BACKEND_URL}/api/devices/${deviceId}`, {
-                    method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${localStorage.getItem('token')}`
-                    },
-                    body: JSON.stringify({ name })
-                });
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.message || 'Failed to rename device');
-                }
-                const device = await response.json();
-                showToast(`Device renamed to ${device.name}`, 'success');
-                fetchDevices();
-            } catch (error) {
-                console.error('Error renaming device:', error);
-                showToast(error.message, 'error');
-                fetchDevices();
-            } finally {
-                toggleLoading(false);
-            }
-        }
-
-        async function toggleDevice(deviceId) {
-            try {
-                toggleLoading(true);
-                const response = await fetch(`${BACKEND_URL}/api/devices/${deviceId}/toggle`, {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-                });
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.message || 'Failed to toggle device');
-                }
-                const device = await response.json();
-                showToast(`Device ${device.name} toggled to ${device.status}`, 'success');
-                fetchDevices();
-            } catch (error) {
-                console.error('Error toggling device:', error);
-                showToast(error.message, 'error');
-            } finally {
-                toggleLoading(false);
+        // Helper function to get status class, similar to what's in dashboard.html
+        function getDeviceStatusClass(status) {
+            switch (status) {
+                case 'ACTIVE': return 'status-active';
+                case 'INACTIVE': return 'status-inactive';
+                case 'LOCKED': return 'status-locked';
+                case 'UNLOCKED': return 'status-unlocked';
+                case 'DETECTED': return 'status-detected';
+                case 'CLEARED': return 'status-cleared';
+                // Add more cases as needed for device specific statuses
+                default: return 'status-info'; // A generic class if status is unknown
             }
         }
 
         function showNotifications() {
+            const notificationsButton = document.getElementById('notificationsButton');
+            const notificationCount = document.getElementById('notificationCount');
             if (unreadNotifications === 0) {
                 showToast('No new notifications', 'info');
                 return;
             }
             const notificationList = document.createElement('div');
-            notificationList.className = 'notification-list';
+            notificationList.className = 'notification-list bg-gray-700 p-4 rounded shadow';
+            const ul = document.createElement('ul');
+            ul.setAttribute('role', 'list');
             for (let i = 0; i < unreadNotifications; i++) {
-                const notificationItem = document.createElement('div');
-                notificationItem.className = 'notification-item';
-                notificationItem.textContent = `Notification ${i + 1}`;
-                notificationList.appendChild(notificationItem);
+                const li = document.createElement('li');
+                li.className = 'notification-item text-gray-200 py-1';
+                li.textContent = `New Event ${i + 1} requiring attention.`;
+                ul.appendChild(li);
             }
+            notificationList.appendChild(ul);
             showToast(notificationList, 'info', true);
             unreadNotifications = 0;
-            updateNotificationCount();
-        }
-
-        function updateNotificationCount() {
-            notificationCount.textContent = unreadNotifications > 0 ? unreadNotifications : '';
-            notificationsButton.classList.toggle('has-notifications', unreadNotifications > 0);
+            notificationCount.textContent = '';
+            notificationCount.classList.add('hidden');
+            notificationsButton.classList.remove('has-notifications');
+            notificationsButton.setAttribute('aria-label', 'View Notifications. No unread notifications.');
         }
 
         function incrementNotificationCount() {
             unreadNotifications++;
-            updateNotificationCount();
+            const notificationCount = document.getElementById('notificationCount');
+            notificationCount.textContent = unreadNotifications;
+            notificationCount.classList.remove('hidden');
+            document.getElementById('notificationsButton').classList.add('has-notifications');
+            document.getElementById('notificationsButton').setAttribute('aria-label', `View Notifications. ${unreadNotifications} unread notifications.`);
         }
 
-        function showToast(message, type = 'info', persistent = false) {
-            const toast = document.createElement('div');
-            toast.className = `toast toast-${type}`;
-            toast.innerHTML = `
-                <div class="toast-content">${typeof message === 'string' ? message : message.outerHTML}</div>
-                <button class="toast-close" onclick="this.parentElement.remove()">×</button>
-            `;
-            if (!persistent) {
-                setTimeout(() => {
-                    toast.remove();
-                }, 5000);
-            }
-            toastContainer.appendChild(toast);
-            if (type === 'error') {
-                console.error('Toast Error:', message);
-            } else if (type === 'success') {
-                console.log('Toast Success:', message);
-            } else {
-                console.log('Toast Info:', message);
-            }
+        async function initDevices() {
+            await fetchConfig();
+            await fetchUser();
+            setupEventListeners();
+            mqttClient = connectMqtt();
+            fetchDevices();
+            startPolling();
+            speak('You are now on the Devices page.'); // NEW
+            playBeep(1);
         }
-
-        function toggleLoading(show) {
-            loadingSpinner.style.display = show ? 'block' : 'none';
-        }
-
         document.addEventListener('DOMContentLoaded', initDevices);
     </script>
 </body>

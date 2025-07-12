@@ -20,7 +20,7 @@ const DISTANCE_DANGER_THRESHOLD = 15;
 const DISTANCE_UNLOCK_THRESHOLD = 8;
 
 // 🌐 This is already correctly pointing to your deployed Render backend. No change needed here.
-const CONFIG_URL = 'https://smarthomesecurity.onrender.com/api/config';
+const CONFIG_URL = 'https://smarthome-lfyp.onrender.com/api/config';
 
 // NEW: Speech synthesis setup
 const synth = window.speechSynthesis;
@@ -89,7 +89,7 @@ async function fetchConfig() {
         console.error('Error fetching config:', error.message);
         showToast('Failed to load server configuration. Using default deployed URLs.', 'error');
         // 🚨 FALLBACK: These are already correctly set to your deployed Render backend and HiveMQ Cloud.
-        BACKEND_URL = 'https://smarthomesecurity.onrender.com';
+        BACKEND_URL = 'https://smarthome-lfyp.onrender.com';
         MQTT_BROKER = 'mqtts://e6973762221648ee81e22bdb68c9a524.s1.eu.hivemq.cloud:8883';
     }
 }
@@ -428,8 +428,6 @@ function showToast(message, type = 'info', persistent = false) {
         }, 5000);
     }
 }
-
-
 function toggleLoading(show) {
     const loadingSpinner = document.getElementById('loadingSpinner');
     if (loadingSpinner) {

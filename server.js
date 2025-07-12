@@ -76,8 +76,8 @@ app.get('/analytics.html', (req, res) => {
 app.get('/settings.html', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'settings.html'));
 });
-app.get('/login.html', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'login.html'));
+app.get('/index.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 app.get('/register.html', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'register.html'));

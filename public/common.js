@@ -1,7 +1,9 @@
 let BACKEND_URL, MQTT_BROKER;
 const MQTT_OPTIONS = {
-    username: 'don',
-    password: '0106908',
+    // 🔒 CHANGE THESE: Use your actual HiveMQ Cloud username and password here.
+    // These are the credentials you created in HiveMQ Cloud's Access Management.
+    username: 'hemsworth', // Make sure this matches your HiveMQ username EXACTLY.
+    password: '132400La@', // Make sure this matches your HiveMQ password EXACTLY.
     clientId: 'webClient_' + Math.random().toString(16).slice(3)
 };
 const MQTT_TOPICS = [
@@ -16,7 +18,9 @@ const POLL_INTERVAL = 2000;
 const DISTANCE_WARNING_THRESHOLD = 30;
 const DISTANCE_DANGER_THRESHOLD = 15;
 const DISTANCE_UNLOCK_THRESHOLD = 8;
-const CONFIG_URL = 'http://localhost:3000/api/config'; // Local development URL
+
+// 🌐 This is already correctly pointing to your deployed Render backend. No change needed here.
+const CONFIG_URL = 'https://smarthomesecurity.onrender.com/api/config';
 
 // NEW: Speech synthesis setup
 const synth = window.speechSynthesis;
@@ -58,25 +62,40 @@ function speak(text, rate = 1.0, pitch = 1.0) {
     currentUtterance = utterance; // Store reference to the current utterance
 }
 
-
 async function fetchConfig() {
     try {
         const response = await fetch(CONFIG_URL, { timeout: 5000 });
         if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
-        const { serverIp } = await response.json();
-        if (!serverIp) throw new Error('Invalid server IP');
-        BACKEND_URL = `http://${serverIp}`;
-        MQTT_BROKER = `mqtt://${serverIp}:1883`; // Local Mosquitto on port 1883
+        // Assuming your /api/config endpoint returns { serverIp: 'your_backend_url', mqttBroker: 'your_mqtt_url' }
+        // or directly { backendUrl: '...', mqttBroker: '...' }
+        const config = await response.json();
+
+        // Adjust this logic based on what your /api/config actually returns.
+        // If it returns 'serverIp', construct URLs:
+        if (config.serverIp) {
+            BACKEND_URL = `https://${config.serverIp}`; // Use https for Render backend
+            // Ensure config.mqttBrokerUrl is used if available, otherwise construct from serverIp
+            MQTT_BROKER = config.mqttBrokerUrl || `mqtts://${config.serverIp}:8883`;
+        } else if (config.backendUrl && config.mqttBroker) {
+            // If your /api/config directly provides full URLs:
+            BACKEND_URL = config.backendUrl;
+            MQTT_BROKER = config.mqttBroker;
+        } else {
+            throw new Error('Invalid config format received from API');
+        }
+
         console.log(`Fetched config: BACKEND_URL=${BACKEND_URL}, MQTT_BROKER=${MQTT_BROKER}`);
     } catch (error) {
         console.error('Error fetching config:', error.message);
-        showToast('Failed to load server configuration. Using default URL.', 'error');
-        BACKEND_URL = 'http://localhost:3000'; // Default to local server
-        MQTT_BROKER = 'mqtt://localhost:1883'; // Default to local Mosquitto
+        showToast('Failed to load server configuration. Using default deployed URLs.', 'error');
+        // 🚨 FALLBACK: These are already correctly set to your deployed Render backend and HiveMQ Cloud.
+        BACKEND_URL = 'https://smarthomesecurity.onrender.com';
+        MQTT_BROKER = 'mqtts://e6973762221648ee81e22bdb68c9a524.s1.eu.hivemq.cloud:8883';
     }
 }
 
 function connectMqtt(callback) {
+    // Ensure MQTT_OPTIONS are used when connecting
     const mqttClient = mqtt.connect(MQTT_BROKER, MQTT_OPTIONS);
     mqttClient.on('connect', () => {
         console.log('Connected to MQTT broker');
@@ -100,11 +119,13 @@ function connectMqtt(callback) {
     mqttClient.on('error', (err) => {
         console.error('MQTT error:', err);
         showToast('MQTT connection failed. Retrying...', 'error');
-        setTimeout(() => connectMqtt(callback), 5000);
+        // No explicit setTimeout for reconnect here, mqtt.js client has built-in reconnect logic
+        // This 'error' event often leads to 'close' then auto-reconnect
     });
     mqttClient.on('close', () => {
-        console.log('MQTT connection closed');
+        console.log('MQTT connection closed. Attempting to reconnect...');
         showToast('MQTT connection lost. Reconnecting...', 'error');
+        // The mqtt.js client usually handles auto-reconnect on 'close' events
     });
     return mqttClient;
 }

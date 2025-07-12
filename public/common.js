@@ -326,7 +326,7 @@ async function fetchUser() {
         showToast('Failed to load user data. Please check server connectivity.', 'error');
         speak('Failed to load user data. Please check server connectivity.'); // NEW: Spoken feedback for critical error
         localStorage.removeItem('token');
-        window.location.href = '/login.html';
+        window.location.href = '/index.html';
     }
 }
 

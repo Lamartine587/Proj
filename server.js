@@ -47,8 +47,33 @@ const Log = mongoose.model('Log', LogSchema);
 const Setting = mongoose.model('Setting', SettingSchema);
 const User = mongoose.model('User', UserSchema);
 
-app.use(cors({ origin: process.env.NODE_ENV === 'production' ? process.env.RENDER_EXTERNAL_URL : '*' }));
-app.use(express.json());
+// --- FIXED CORS CONFIGURATION ---
+const allowedOrigins = [
+    'http://localhost:3000', // For local backend development
+    'http://localhost:5500', // Common for Live Server in VS Code
+    'https://proj-five-opal.vercel.app', // Your Vercel frontend URL
+    process.env.FRONTEND_URL, // Environment variable for Vercel URL on Render
+    process.env.RENDER_EXTERNAL_URL // Your Render backend's own URL (often useful for direct access or same-origin requests)
+].filter(Boolean); // Filter out any undefined/null values if env vars are missing
+
+app.use(cors({
+    origin: function (origin, callback) {
+        // Allow requests with no origin (like mobile apps or curl requests)
+        if (!origin) return callback(null, true);
+        if (allowedOrigins.indexOf(origin) === -1) {
+            const msg = `The CORS policy for this site does not allow access from the specified Origin: ${origin}.`;
+            console.warn(msg); // Log for debugging on the server side
+            return callback(new Error(msg), false);
+        }
+        return callback(null, true);
+    },
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // Explicitly list allowed methods
+    credentials: true, // If you plan to send cookies/auth headers with your requests
+    optionsSuccessStatus: 204 // Some legacy browsers (IE11, various SmartTVs) choke on 200
+}));
+// --- END FIXED CORS CONFIGURATION ---
+
+app.use(express.json()); // This line must be AFTER cors middleware
 
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000,
@@ -224,21 +249,24 @@ if (!mqttBrokerUrl) {
     });
 }
 
+// --- FIXED /api/config endpoint ---
 app.get('/api/config', (req, res) => {
-    let backendHost;
+    let backendUrl;
     if (process.env.NODE_ENV === 'production' && process.env.RENDER_EXTERNAL_HOSTNAME) {
-        backendHost = process.env.RENDER_EXTERNAL_HOSTNAME;
+        backendUrl = `https://${process.env.RENDER_EXTERNAL_HOSTNAME}`;
     } else {
-        backendHost = req.headers.host || '127.0.0.1:3000';
+        backendUrl = `http://${req.headers.host || '127.0.0.1:3000'}`;
     }
 
-    const clientMqttBrokerUrl = process.env.MQTT_BROKER_CLIENT_URL || process.env.MQTT_BROKER_URL;
+    // Use MQTT_BROKER_CLIENT_URL if available, otherwise fallback to MQTT_BROKER_URL
+    const mqttBroker = process.env.MQTT_BROKER_CLIENT_URL || process.env.MQTT_BROKER_URL;
 
     res.json({
-        backendHost: backendHost.split(':')[0],
-        mqttBrokerClientUrl: clientMqttBrokerUrl
+        backendUrl: backendUrl, // Changed key from backendHost to backendUrl
+        mqttBroker: mqttBroker // Changed key from mqttBrokerClientUrl to mqttBroker
     });
 });
+// --- END FIXED /api/config endpoint ---
 
 app.post('/api/auth/register', limiter, async (req, res) => {
     const { email, password, name } = req.body;

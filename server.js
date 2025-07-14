@@ -78,7 +78,7 @@ const limiter = rateLimit({
     max: 1000,
     message: { message: 'Too many requests, please try again later' }
 });
-app.use('/api/auth/login', limiter);
+app.use('/api/auth/index', limiter);
 app.use('/api/auth/register', limiter);
 
 app.use(express.static(path.join(__dirname, 'public')));

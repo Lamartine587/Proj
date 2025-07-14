@@ -117,6 +117,9 @@ const authenticateToken = (req, res, next) => {
     });
 };
 
+// Initialize mqttClient in global scope
+let mqttClient = null;
+
 const mqttBrokerUrl = process.env.MQTT_BROKER_URL;
 if (!mqttBrokerUrl) {
     console.error('MQTT_BROKER_URL environment variable is not set. MQTT client will not connect.');
@@ -131,7 +134,7 @@ if (!mqttBrokerUrl) {
         reconnectPeriod: 1000
     };
 
-    const mqttClient = mqtt.connect(mqttBrokerUrl, mqttOptions);
+    mqttClient = mqtt.connect(mqttBrokerUrl, mqttOptions);
 
     mqttClient.on('connect', () => {
         console.log(`Connected to MQTT Broker at ${mqttBrokerUrl}`);
@@ -244,13 +247,15 @@ if (!mqttBrokerUrl) {
     mqttClient.on('close', () => {
         console.log('MQTT connection closed. Attempting to reconnect...');
     });
+}
 
-    // Bridge HTTP to MQTT for Android app
-    async function publishToMqtt(deviceId, status, value, logMessage, logType) {
-        if (!mqttClient || !mqttClient.connected) {
-            console.warn('MQTT client not connected, cannot publish.');
-            return;
-        }
+// Bridge HTTP to MQTT for Android app
+async function publishToMqtt(deviceId, status, value, logMessage, logType) {
+    if (!mqttClient || !mqttClient.connected) {
+        console.warn('MQTT client not connected, cannot publish.');
+        return;
+    }
+    try {
         if (deviceId === 'smartLock001') {
             mqttClient.publish('home/lock/status', status, { qos: 1 });
         } else if (deviceId === 'motionSensor001') {
@@ -264,98 +269,104 @@ if (!mqttBrokerUrl) {
         } else if (deviceId === 'rfidEvent') {
             mqttClient.publish('home/rfid/events', logMessage, { qos: 1 });
         }
+    } catch (error) {
+        console.error('Error publishing to MQTT:', error);
     }
+}
 
-    // New endpoint for ESP32 sensor data
-    app.post('/api/sensors', async (req, res) => {
-        try {
-            const { updates } = req.body;
-            if (!updates || !Array.isArray(updates)) {
-                return res.status(400).json({ message: 'Invalid payload: updates array required' });
-            }
+// New endpoint for ESP32 sensor data
+app.post('/api/sensors', async (req, res) => {
+    try {
+        const { updates } = req.body;
+        if (!updates || !Array.isArray(updates)) {
+            return res.status(400).json({ message: 'Invalid payload: updates array required' });
+        }
 
-            for (const update of updates) {
-                let logMessage, logType = 'info';
-                if (update.deviceId === 'smartLock001') {
-                    await Device.findOneAndUpdate(
-                        { deviceId: update.deviceId },
-                        { status: update.status, isArmed: update.status === 'LOCKED', lastActivity: new Date(update.lastActivity) },
-                        { upsert: true, new: true }
-                    );
-                    logMessage = `Smart Lock status: ${update.status}`;
-                    if (update.status === 'UNLOCKED') {
-                        const ultrasonic = await Device.findOne({ deviceId: 'ultrasonicSensor001' });
-                        if (ultrasonic && ultrasonic.value > 0 && ultrasonic.value < 8) {
-                            logMessage = 'Door unlocked by RFID at close distance';
-                            logType = 'success';
-                        }
+        for (const update of updates) {
+            let logMessage, logType = 'info';
+            if (update.deviceId === 'smartLock001') {
+                await Device.findOneAndUpdate(
+                    { deviceId: update.deviceId },
+                    { status: update.status, isArmed: update.status === 'LOCKED', lastActivity: new Date(update.lastActivity) },
+                    { upsert: true, new: true }
+                );
+                logMessage = `Smart Lock status: ${update.status}`;
+                if (update.status === 'UNLOCKED') {
+                    const ultrasonic = await Device.findOne({ deviceId: 'ultrasonicSensor001' });
+                    if (ultrasonic && ultrasonic.value > 0 && ultrasonic.value < 8) {
+                        logMessage = 'Door unlocked by RFID at close distance';
+                        logType = 'success';
                     }
-                    publishToMqtt(update.deviceId, update.status);
-                } else if (update.deviceId === 'motionSensor001') {
-                    await Device.findOneAndUpdate(
-                        { deviceId: update.deviceId },
-                        { status: update.status, lastActivity: new Date(update.lastActivity) },
-                        { upsert: true, new: true }
-                    );
-                    logMessage = `Motion Sensor status: ${update.status}`;
-                    if (update.status === 'DETECTED') logType = 'warning';
-                    publishToMqtt(update.deviceId, update.status);
-                } else if (update.deviceId === 'ultrasonicSensor001') {
-                    await Device.findOneAndUpdate(
-                        { deviceId: update.deviceId },
-                        { value: update.value, lastActivity: new Date(update.lastActivity) },
-                        { upsert: true, new: true }
-                    );
-                    logMessage = `Ultrasonic Sensor distance: ${update.value} cm`;
-                    if (update.value > 0 && update.value < 15) logType = 'warning';
-                    publishToMqtt(update.deviceId, null, update.value);
-                } else if (update.deviceId === 'siren001') {
-                    await Device.findOneAndUpdate(
-                        { deviceId: update.deviceId },
-                        { status: update.status, lastActivity: new Date(update.lastActivity) },
-                        { upsert: true, new: true }
-                    );
-                    logMessage = `Alarm status: ${update.status}`;
-                    if (update.status === 'ACTIVE') logType = 'danger';
-                    publishToMqtt(update.deviceId, update.status);
-                } else if (update.settingName === 'systemArmed') {
-                    await Setting.findOneAndUpdate(
-                        { settingName: update.settingName },
-                        { value: update.value, lastActivity: new Date(update.lastActivity) },
-                        { upsert: true, new: true }
-                    );
-                    logMessage = `Security system is now: ${update.value ? 'ARMED' : 'DISARMED'}`;
-                    if (update.value) logType = 'success';
-                    publishToMqtt(update.settingName, update.value ? 'ARMED' : 'DISARMED');
-                } else if (update.deviceId === 'rfidEvent') {
-                    logMessage = update.message;
-                    logType = update.type;
-                    publishToMqtt(update.deviceId, null, null, logMessage, logType);
                 }
-
-                if (logMessage) {
-                    await Log.create({ message: logMessage, type: logType });
-                }
+                publishToMqtt(update.deviceId, update.status);
+            } else if (update.deviceId === 'motionSensor001') {
+                await Device.findOneAndUpdate(
+                    { deviceId: update.deviceId },
+                    { status: update.status, lastActivity: new Date(update.lastActivity) },
+                    { upsert: true, new: true }
+                );
+                logMessage = `Motion Sensor status: ${update.status}`;
+                if (update.status === 'DETECTED') logType = 'warning';
+                publishToMqtt(update.deviceId, update.status);
+            } else if (update.deviceId === 'ultrasonicSensor001') {
+                await Device.findOneAndUpdate(
+                    { deviceId: update.deviceId },
+                    { value: update.value, lastActivity: new Date(update.lastActivity) },
+                    { upsert: true, new: true }
+                );
+                logMessage = `Ultrasonic Sensor distance: ${update.value} cm`;
+                if (update.value > 0 && update.value < 15) logType = 'warning';
+                publishToMqtt(update.deviceId, null, update.value);
+            } else if (update.deviceId === 'siren001') {
+                await Device.findOneAndUpdate(
+                    { deviceId: update.deviceId },
+                    { status: update.status, lastActivity: new Date(update.lastActivity) },
+                    { upsert: true, new: true }
+                );
+                logMessage = `Alarm status: ${update.status}`;
+                if (update.status === 'ACTIVE') logType = 'danger';
+                publishToMqtt(update.deviceId, update.status);
+            } else if (update.settingName === 'systemArmed') {
+                await Setting.findOneAndUpdate(
+                    { settingName: update.settingName },
+                    { value: update.value, lastActivity: new Date(update.lastActivity) },
+                    { upsert: true, new: true }
+                );
+                logMessage = `Security system is now: ${update.value ? 'ARMED' : 'DISARMED'}`;
+                if (update.value) logType = 'success';
+                publishToMqtt(update.settingName, update.value ? 'ARMED' : 'DISARMED');
+            } else if (update.deviceId === 'rfidEvent') {
+                logMessage = update.message;
+                logType = update.type;
+                publishToMqtt(update.deviceId, null, null, logMessage, logType);
             }
 
-            res.status(201).json({ message: 'Sensor data processed' });
-        } catch (error) {
-            console.error('Error processing sensor data:', error);
-            res.status(500).json({ message: 'Server error' });
+            if (logMessage) {
+                await Log.create({ message: logMessage, type: logType });
+            }
         }
-    });
 
-    // New endpoint for ESP32 to poll commands
-    app.get('/api/commands', async (req, res) => {
-        const deviceId = req.query.device_id;
-        if (!deviceId) {
-            return res.status(400).json({ message: 'device_id required' });
-        }
-        // Example: Return last command or use a command queue
+        res.status(201).json({ message: 'Sensor data processed' });
+    } catch (error) {
+        console.error('Error processing sensor data:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+// New endpoint for ESP32 to poll commands
+app.get('/api/commands', async (req, res) => {
+    const deviceId = req.query.device_id;
+    if (!deviceId) {
+        return res.status(400).json({ message: 'device_id required' });
+    }
+    try {
         const command = await Device.findOne({ deviceId: 'smartLock001' }).select('status').lean() || { status: 'LOCK' };
         res.status(200).json({ command: command.status === 'LOCKED' ? 'LOCK' : 'UNLOCK' });
-    });
-}
+    } catch (error) {
+        console.error('Error fetching command:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
 
 app.get('/api/config', (req, res) => {
     let backendUrl;
@@ -502,19 +513,36 @@ app.post('/api/commands', authenticateToken, async (req, res) => {
     }
 
     try {
-        if (!mqttClient || !mqttClient.connected) {
-            console.warn('MQTT client not connected, cannot send command.');
-            return res.status(503).json({ message: 'MQTT service unavailable' });
+        // Update MongoDB to reflect the command
+        if (command === 'ARM' || command === 'DISARM') {
+            await Setting.findOneAndUpdate(
+                { settingName: 'systemArmed' },
+                { value: command === 'ARM', lastActivity: Date.now() },
+                { upsert: true, new: true }
+            );
+        } else if (command === 'LOCK' || command === 'UNLOCK') {
+            await Device.findOneAndUpdate(
+                { deviceId: 'smartLock001' },
+                { status: command === 'LOCK' ? 'LOCKED' : 'UNLOCKED', isArmed: command === 'LOCK', lastActivity: Date.now() },
+                { upsert: true, new: true }
+            );
         }
+
+        // Attempt to publish to MQTT for Android app
+        if (!mqttClient || !mqttClient.connected) {
+            console.warn('MQTT client not connected, command stored in MongoDB but not published.');
+            return res.status(200).json({ message: `Command ${command} processed but MQTT unavailable` });
+        }
+
         const topic = command === 'ARM' || command === 'DISARM' ? 'home/security/armed' : 'home/lock/status';
         const payload = command === 'ARM' ? 'ARMED' : command === 'DISARM' ? 'DISARMED' : command;
         mqttClient.publish(topic, payload, { qos: 1 }, (err) => {
             if (err) {
                 console.error(`Error publishing to ${topic}:`, err);
-                return res.status(500).json({ message: 'Failed to send command' });
+                return res.status(500).json({ message: 'Failed to send command to MQTT' });
             }
             console.log(`Published command ${command} to ${topic}`);
-            res.json({ message: `Command ${command} sent` });
+            res.status(200).json({ message: `Command ${command} sent` });
         });
     } catch (error) {
         console.error('Error sending command:', error);

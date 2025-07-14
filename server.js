@@ -1,4 +1,3 @@
-// server.js
 const express = require('express');
 const dotenv = require('dotenv');
 const cors = require('cors');
@@ -49,33 +48,30 @@ const Log = mongoose.model('Log', LogSchema);
 const Setting = mongoose.model('Setting', SettingSchema);
 const User = mongoose.model('User', UserSchema);
 
-// --- FIXED CORS CONFIGURATION ---
 const allowedOrigins = [
-    'http://localhost:3000', // For local backend development
-    'http://localhost:5500', // Common for Live Server in VS Code
-    'https://proj-five-opal.vercel.app', // Your Vercel frontend URL
-    process.env.FRONTEND_URL, // Environment variable for Vercel URL on Render
-    process.env.RENDER_EXTERNAL_URL // Your Render backend's own URL (often useful for direct access or same-origin requests)
-].filter(Boolean); // Filter out any undefined/null values if env vars are missing
+    'http://localhost:3000',
+    'http://localhost:5500',
+    'https://proj-five-opal.vercel.app',
+    process.env.FRONTEND_URL,
+    process.env.RENDER_EXTERNAL_URL
+].filter(Boolean);
 
 app.use(cors({
     origin: function (origin, callback) {
-        // Allow requests with no origin (like mobile apps or curl requests)
         if (!origin) return callback(null, true);
         if (allowedOrigins.indexOf(origin) === -1) {
             const msg = `The CORS policy for this site does not allow access from the specified Origin: ${origin}.`;
-            console.warn(msg); // Log for debugging on the server side
+            console.warn(msg);
             return callback(new Error(msg), false);
         }
         return callback(null, true);
     },
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // Explicitly list allowed methods
-    credentials: true, // If you plan to send cookies/auth headers with your requests
-    optionsSuccessStatus: 204 // Some legacy browsers (IE11, various SmartTVs) choke on 200
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    credentials: true,
+    optionsSuccessStatus: 204
 }));
-// --- END FIXED CORS CONFIGURATION ---
 
-app.use(express.json()); // This line must be AFTER cors middleware
+app.use(express.json());
 
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000,
@@ -90,7 +86,6 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'login.html'));
 });
-
 app.get('/dashboard.html', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
 });
@@ -249,9 +244,119 @@ if (!mqttBrokerUrl) {
     mqttClient.on('close', () => {
         console.log('MQTT connection closed. Attempting to reconnect...');
     });
+
+    // Bridge HTTP to MQTT for Android app
+    async function publishToMqtt(deviceId, status, value, logMessage, logType) {
+        if (!mqttClient || !mqttClient.connected) {
+            console.warn('MQTT client not connected, cannot publish.');
+            return;
+        }
+        if (deviceId === 'smartLock001') {
+            mqttClient.publish('home/lock/status', status, { qos: 1 });
+        } else if (deviceId === 'motionSensor001') {
+            mqttClient.publish('home/sensor/motion', status, { qos: 1 });
+        } else if (deviceId === 'ultrasonicSensor001') {
+            mqttClient.publish('home/sensor/distance', value.toString(), { qos: 1 });
+        } else if (deviceId === 'siren001') {
+            mqttClient.publish('home/security/alarm', status, { qos: 1 });
+        } else if (deviceId === 'systemArmed') {
+            mqttClient.publish('home/security/armed', status, { qos: 1 });
+        } else if (deviceId === 'rfidEvent') {
+            mqttClient.publish('home/rfid/events', logMessage, { qos: 1 });
+        }
+    }
+
+    // New endpoint for ESP32 sensor data
+    app.post('/api/sensors', async (req, res) => {
+        try {
+            const { updates } = req.body;
+            if (!updates || !Array.isArray(updates)) {
+                return res.status(400).json({ message: 'Invalid payload: updates array required' });
+            }
+
+            for (const update of updates) {
+                let logMessage, logType = 'info';
+                if (update.deviceId === 'smartLock001') {
+                    await Device.findOneAndUpdate(
+                        { deviceId: update.deviceId },
+                        { status: update.status, isArmed: update.status === 'LOCKED', lastActivity: new Date(update.lastActivity) },
+                        { upsert: true, new: true }
+                    );
+                    logMessage = `Smart Lock status: ${update.status}`;
+                    if (update.status === 'UNLOCKED') {
+                        const ultrasonic = await Device.findOne({ deviceId: 'ultrasonicSensor001' });
+                        if (ultrasonic && ultrasonic.value > 0 && ultrasonic.value < 8) {
+                            logMessage = 'Door unlocked by RFID at close distance';
+                            logType = 'success';
+                        }
+                    }
+                    publishToMqtt(update.deviceId, update.status);
+                } else if (update.deviceId === 'motionSensor001') {
+                    await Device.findOneAndUpdate(
+                        { deviceId: update.deviceId },
+                        { status: update.status, lastActivity: new Date(update.lastActivity) },
+                        { upsert: true, new: true }
+                    );
+                    logMessage = `Motion Sensor status: ${update.status}`;
+                    if (update.status === 'DETECTED') logType = 'warning';
+                    publishToMqtt(update.deviceId, update.status);
+                } else if (update.deviceId === 'ultrasonicSensor001') {
+                    await Device.findOneAndUpdate(
+                        { deviceId: update.deviceId },
+                        { value: update.value, lastActivity: new Date(update.lastActivity) },
+                        { upsert: true, new: true }
+                    );
+                    logMessage = `Ultrasonic Sensor distance: ${update.value} cm`;
+                    if (update.value > 0 && update.value < 15) logType = 'warning';
+                    publishToMqtt(update.deviceId, null, update.value);
+                } else if (update.deviceId === 'siren001') {
+                    await Device.findOneAndUpdate(
+                        { deviceId: update.deviceId },
+                        { status: update.status, lastActivity: new Date(update.lastActivity) },
+                        { upsert: true, new: true }
+                    );
+                    logMessage = `Alarm status: ${update.status}`;
+                    if (update.status === 'ACTIVE') logType = 'danger';
+                    publishToMqtt(update.deviceId, update.status);
+                } else if (update.settingName === 'systemArmed') {
+                    await Setting.findOneAndUpdate(
+                        { settingName: update.settingName },
+                        { value: update.value, lastActivity: new Date(update.lastActivity) },
+                        { upsert: true, new: true }
+                    );
+                    logMessage = `Security system is now: ${update.value ? 'ARMED' : 'DISARMED'}`;
+                    if (update.value) logType = 'success';
+                    publishToMqtt(update.settingName, update.value ? 'ARMED' : 'DISARMED');
+                } else if (update.deviceId === 'rfidEvent') {
+                    logMessage = update.message;
+                    logType = update.type;
+                    publishToMqtt(update.deviceId, null, null, logMessage, logType);
+                }
+
+                if (logMessage) {
+                    await Log.create({ message: logMessage, type: logType });
+                }
+            }
+
+            res.status(201).json({ message: 'Sensor data processed' });
+        } catch (error) {
+            console.error('Error processing sensor data:', error);
+            res.status(500).json({ message: 'Server error' });
+        }
+    });
+
+    // New endpoint for ESP32 to poll commands
+    app.get('/api/commands', async (req, res) => {
+        const deviceId = req.query.device_id;
+        if (!deviceId) {
+            return res.status(400).json({ message: 'device_id required' });
+        }
+        // Example: Return last command or use a command queue
+        const command = await Device.findOne({ deviceId: 'smartLock001' }).select('status').lean() || { status: 'LOCK' };
+        res.status(200).json({ command: command.status === 'LOCKED' ? 'LOCK' : 'UNLOCK' });
+    });
 }
 
-// --- FIXED /api/config endpoint ---
 app.get('/api/config', (req, res) => {
     let backendUrl;
     if (process.env.NODE_ENV === 'production' && process.env.RENDER_EXTERNAL_HOSTNAME) {
@@ -260,15 +365,13 @@ app.get('/api/config', (req, res) => {
         backendUrl = `http://${req.headers.host || '127.0.0.1:3000'}`;
     }
 
-    // Use MQTT_BROKER_CLIENT_URL if available, otherwise fallback to MQTT_BROKER_URL
     const mqttBroker = process.env.MQTT_BROKER_CLIENT_URL || process.env.MQTT_BROKER_URL;
 
     res.json({
-        backendUrl: backendUrl, // Changed key from backendHost to backendUrl
-        mqttBroker: mqttBroker // Changed key from mqttBrokerClientUrl to mqttBroker
+        backendUrl,
+        mqttBroker
     });
 });
-// --- END FIXED /api/config endpoint ---
 
 app.post('/api/auth/register', limiter, async (req, res) => {
     const { email, password, name } = req.body;
